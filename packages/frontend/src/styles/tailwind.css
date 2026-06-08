@@ -1,0 +1,26 @@
+@import 'tailwindcss' source(none);
+@source '../**/*.{js,ts,jsx,tsx}';
+@import 'tw-animate-css';
+
+/* Enable smooth scrolling for anchor links */
+html {
+  scroll-behavior: smooth;
+}
+
+@layer utilities {
+  .bg-vibrant-mesh {
+    /* Bright orange/peach base */
+    background-color: #f07e4d; 
+    background-image: 
+      /* Bright, pale mint/yellow light source in the upper left */
+      radial-gradient(at 0% 0%, #e4f0d0 0px, transparent 55%),
+      /* Rich, deep orange in the top right */
+      radial-gradient(at 100% 0%, #e85d22 0px, transparent 60%),
+      /* Cool blue/teal pulling up from the bottom right */
+      radial-gradient(at 100% 100%, #4a90e2 0px, transparent 75%),
+      /* Soft blue blending into the bottom left */
+      radial-gradient(at 0% 100%, #85b0d6 0px, transparent 50%);
+    background-size: cover;
+    background-attachment: fixed;
+  }
+}

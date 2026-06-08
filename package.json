@@ -1,0 +1,12 @@
+{
+  "name": "aria-cdss",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter backend dev\" \"pnpm --filter frontend dev\"",
+    "dev:be": "pnpm --filter backend dev",
+    "dev:fe": "pnpm --filter frontend dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0"
+  }
+}
