@@ -1,14 +1,16 @@
-require('dotenv').config();
+require('./dns-fix');
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
 
 connectDB();
+connectDB().then(() => seedUser());
 
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true
 }));
 
@@ -69,3 +71,16 @@ app.listen(PORT, () => {
   console.log('  GET  /api/admin/stats (admin only)');
   console.log('  GET  /api/working\n');
 });
+
+const seedUser = async () => {
+  const User = require('./models/User'); 
+  const count = await User.countDocuments();
+  if (count === 0) {
+    await User.create({ 
+      name: 'Test Doctor', // <--- Add this line!
+      email: 'test@aria.com', 
+      password: 'CHANGEME' 
+    });
+    console.log("Test user created: test@aria.com / CHANGEME");
+  }
+};
