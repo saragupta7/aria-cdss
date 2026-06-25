@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
 import { ArrowLeft, TrendingDown, TrendingUp, AlertTriangle, FileText, BrainCircuit, Activity, HeartPulse, Wind, Droplets } from "lucide-react";
-import { getPatientById } from "../data/patients";
+import { patientsApi } from "../../api/patients";
+import type { Patient } from "@aria/shared";
 import {
   LineChart,
   Line,
@@ -22,8 +23,39 @@ type TabType = 'Overview' | 'Flowsheet (Vitals)' | 'Trend Board' | 'SHAP' | 'Ale
 
 export function PatientDetail() {
   const { id } = useParams<{ id: string }>();
-  const patient = getPatientById(id!);
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+
+  useEffect(() => {
+  if (!id) return;
+
+  const fetchPatient = async () => {
+    try {
+      setLoading(true);
+
+      const data = await patientsApi.getById(id);
+
+      setPatient(data);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load patient");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchPatient();
+}, [id]);
+
+  if (loading) {
+    return <div>Loading patient...</div>;
+  }
+
+  if (error) {
+    return <div>{error}</div>;
+  }
 
   if (!patient) {
     return (
@@ -36,23 +68,39 @@ export function PatientDetail() {
     );
   }
 
-  // Expanded Mock Time-Series Data for Flowsheets and Trend Boards
-  const times = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00 (Now)'];
-  const vitalsData = [
-    { time: '06:00', map: 82, hr: 88, lactate: 1.2, spo2: 98, rr: 16 },
-    { time: '08:00', map: 78, hr: 92, lactate: 1.5, spo2: 97, rr: 18 },
-    { time: '10:00', map: 75, hr: 95, lactate: 1.8, spo2: 96, rr: 20 },
-    { time: '12:00', map: 71, hr: 98, lactate: 2.1, spo2: 95, rr: 22 },
-    { time: '14:00', map: 69, hr: 104, lactate: 2.4, spo2: 93, rr: 24 },
-    { time: '16:00', map: patient.vitals.map, hr: patient.vitals.heartRate, lactate: patient.vitals.lactate, spo2: patient.vitals.spO2, rr: patient.vitals.respRate },
-  ];
+  // Map Live Time-Series Data from Database
+  const vitalsData = Array.isArray(patient.vitals) && patient.vitals.length > 0 
+    ? patient.vitals.map((v: any) => {
+        const sbp = v.bloodPressureSystolic || 120;
+        const dbp = v.bloodPressureDiastolic || 80;
+        const map = Math.round((sbp + 2 * dbp) / 3);
+        const date = new Date(v.timestamp);
+        return {
+          time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
+          map,
+          hr: v.heartRate || 0,
+          lactate: v.lactate || 0,
+          spo2: v.oxygenSaturation || 0,
+          rr: v.respiratoryRate || 0,
+          sbp,
+          dbp,
+          creatinine: v.creatinine || 1.1 // fallback
+        };
+      })
+    : [];
 
-  // Mock SHAP Explanation Data
-  const shapData = [
-    { feature: 'Lactate Trend', impact: 45, value: `${patient.vitals.lactate} mmol/L` },
+  const latestVitals = vitalsData.length > 0 
+    ? vitalsData[vitalsData.length - 1] 
+    : { map: 0, hr: 0, spo2: 0, rr: 0, sbp: 0, dbp: 0, lactate: 0, creatinine: 0 };
+
+  const times = vitalsData.map(v => v.time);
+
+  // Map SHAP Data from Model if available, otherwise use mock based on latest vitals
+  const shapData = patient.riskScore?.shapValues || [
+    { feature: 'Lactate Trend', impact: 45, value: `${latestVitals.lactate} mmol/L` },
     { feature: 'MAP Slope', impact: 30, value: '-4.2 mmHg/hr' },
-    { feature: 'Vasopressor', impact: 15, value: patient.vasopressor ? 'Active' : 'None' },
-    { feature: 'Heart Rate', impact: 10, value: `${patient.vitals.heartRate} bpm` },
+    { feature: 'Vasopressor', impact: 15, value: (patient as any).vasopressor ? 'Active' : 'None' },
+    { feature: 'Heart Rate', impact: 10, value: `${latestVitals.hr} bpm` },
   ];
 
   const notesData = [
@@ -60,13 +108,21 @@ export function PatientDetail() {
     { time: '12:15 today', author: 'Nurse Michael R.', text: 'Lactate labs drawn and sent to path. Patient resting comfortably.' },
   ];
 
+  // Helper Mappings
+  const displayRiskScore = Math.round(((patient as any).riskScore || 0) * 100);
+  const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+  const displayRiskLevel = riskLevelMap[(patient as any).riskLevel || 'low'] || 'STABLE';
+  const icuDays = (patient as any).admissionDate 
+    ? Math.max(1, Math.floor((new Date().getTime() - new Date((patient as any).admissionDate).getTime()) / (1000 * 3600 * 24)))
+    : 1;
+
   return (
     <div className="bg-slate-50/50 min-h-screen pb-12">
       
       {/* Sleek Top Banner & Breadcrumb */}
       <div className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-10 flex items-center justify-between">
-        <Link to={`/dashboard/ward/${patient.ward}`} className="inline-flex items-center gap-2 text-slate-500 font-bold hover:text-[#3b82f6] transition-colors text-sm">
-          <ArrowLeft className="w-4 h-4" /> Back to Ward {patient.ward}
+        <Link to={`/dashboard/ward/${(patient as any).ward || 'ICU'}`} className="inline-flex items-center gap-2 text-slate-500 font-bold hover:text-[#3b82f6] transition-colors text-sm">
+          <ArrowLeft className="w-4 h-4" /> Back to Ward {(patient as any).ward || 'ICU'}
         </Link>
         <div className="flex gap-3">
           <button className="px-5 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 shadow-sm transition-all">
@@ -87,33 +143,33 @@ export function PatientDetail() {
               <div className="flex items-center gap-4 mb-3">
                 <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{patient.name}</h1>
                 <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
-                  patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                  patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                  displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
+                  displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                   'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
                 }`}>
                   <span className={`w-2 h-2 rounded-sm mr-2 ${
-                    patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                    patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                    displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
+                    displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
                     'bg-[#e85d22] animate-pulse'
                   }`}></span>
-                  {patient.riskLevel}
+                  {displayRiskLevel}
                 </span>
-                <span className="text-slate-400 font-mono text-sm tracking-widest">{patient.id}</span>
+                <span className="text-slate-400 font-mono text-sm tracking-widest">{(patient as any).patientId || patient.id}</span>
               </div>
               
               {/* Demographics Pill Row */}
               <div className="flex flex-wrap gap-2">
                 <Badge label="Age" value={`${patient.age}y`} />
-                <Badge label="Sex" value={patient.gender === 'M' ? 'Male' : 'Female'} />
-                <Badge label="Location" value={`Ward ${patient.ward} • Bed ${patient.bed}`} />
-                <Badge label="Admitted" value={`ICU Day ${patient.icuDay}`} />
+                <Badge label="Sex" value={(patient as any).gender || 'Unknown'} />
+                <Badge label="Location" value={`Ward ${(patient as any).ward || 'ICU'} • Bed ${(patient as any).icuBed || (patient as any).bed || 'Unknown'}`} />
+                <Badge label="Admitted" value={`ICU Day ${icuDays}`} />
                 <Badge label="Code" value="FULL CODE" alert={false} />
                 <Badge label="Allergies" value="NKA" alert={false} />
               </div>
             </div>
 
             {/* Quick System Status */}
-            {patient.vasopressor && (
+            {(patient as any).vasopressor && (
               <div className="bg-[#e85d22]/5 border border-[#e85d22]/20 rounded-xl p-4 text-right">
                 <p className="text-[#e85d22] text-xs font-bold uppercase tracking-wider mb-1">Active Infusion</p>
                 <p className="text-slate-900 font-bold flex items-center justify-end gap-2">
@@ -153,19 +209,19 @@ export function PatientDetail() {
                   </span>
                 </div>
                 <div className="space-y-1">
-                  <VitalRow label="MAP" value={patient.vitals.map} unit="mmHg" trend="down" statusColor={patient.vitals.map < 65 ? "text-[#e85d22]" : undefined} />
-                  <VitalRow label="Heart Rate" value={patient.vitals.heartRate} unit="bpm" trend="up" />
-                  <VitalRow label="SpO2" value={patient.vitals.spO2} unit="%" />
-                  <VitalRow label="Resp Rate" value={patient.vitals.respRate} unit="bpm" />
-                  <VitalRow label="Blood Pressure" value={`${patient.vitals.sbp}/${patient.vitals.dbp}`} unit="mmHg" />
+                  <VitalRow label="MAP" value={latestVitals.map} unit="mmHg" trend="down" statusColor={latestVitals.map < 65 ? "text-[#e85d22]" : undefined} />
+                  <VitalRow label="Heart Rate" value={latestVitals.hr} unit="bpm" trend="up" />
+                  <VitalRow label="SpO2" value={latestVitals.spo2} unit="%" />
+                  <VitalRow label="Resp Rate" value={latestVitals.rr} unit="bpm" />
+                  <VitalRow label="Blood Pressure" value={`${latestVitals.sbp}/${latestVitals.dbp}`} unit="mmHg" />
                 </div>
               </div>
 
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                 <h3 className="text-slate-900 font-bold text-lg mb-4">Recent Labs</h3>
                 <div className="space-y-1">
-                  <VitalRow label="Lactate" value={patient.vitals.lactate} unit="mmol/L" trend="up" statusColor={patient.vitals.lactate > 2.0 ? "text-[#e85d22]" : undefined} />
-                  <VitalRow label="Creatinine" value={patient.vitals.creatinine} unit="mg/dL" />
+                  <VitalRow label="Lactate" value={latestVitals.lactate} unit="mmol/L" trend="up" statusColor={latestVitals.lactate > 2.0 ? "text-[#e85d22]" : undefined} />
+                  <VitalRow label="Creatinine" value={latestVitals.creatinine} unit="mg/dL" />
                 </div>
               </div>
             </div>
@@ -176,26 +232,26 @@ export function PatientDetail() {
                   <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">AI Risk Score</p>
                   <div className="flex items-baseline gap-3">
                     <p className={`text-5xl font-bold leading-none ${
-                      patient.riskScore >= 75 ? 'text-[#e85d22]' :
-                      patient.riskScore >= 50 ? 'text-[#f59e0b]' :
+                      displayRiskScore >= 75 ? 'text-[#e85d22]' :
+                      displayRiskScore >= 50 ? 'text-[#f59e0b]' :
                       'text-[#3b82f6]'
-                    }`}>{patient.riskScore}%</p>
+                    }`}>{displayRiskScore}%</p>
                     <p className="text-slate-400 font-medium text-sm">instability probability</p>
                   </div>
                 </div>
                 
-                {patient.predictedInstability ? (
+                {(patient as any).predictedInstability ? (
                   <div className="bg-[#f59e0b]/5 rounded-2xl p-6 shadow-sm border border-[#f59e0b]/20 flex flex-col justify-center">
                     <p className="text-[#d97706] text-xs font-bold uppercase tracking-wider mb-2">Estimated Lead Time</p>
                     <div className="flex items-baseline gap-3">
-                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{patient.predictedInstability}</p>
+                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{(patient as any).predictedInstability}</p>
                       <p className="text-[#d97706]/70 font-medium text-sm">until critical event</p>
                     </div>
                   </div>
                 ) : (
                   <div className="bg-[#3b82f6]/5 rounded-2xl p-6 shadow-sm border border-[#3b82f6]/10 flex flex-col justify-center">
                     <p className="text-[#3b82f6] text-xs font-bold uppercase tracking-wider mb-2">Clinical Status</p>
-                    <p className="text-2xl font-bold text-[#3b82f6]">Currently Stable</p>
+                    <p className="text-2xl font-bold text-[#3b82f6]">{displayRiskLevel === 'STABLE' ? 'Currently Stable' : 'Monitor Closely'}</p>
                   </div>
                 )}
               </div>
@@ -277,7 +333,7 @@ export function PatientDetail() {
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 border-b border-slate-100 border-r text-slate-700 font-bold bg-slate-50/30">Lactate (mmol/L)</td>
                     {vitalsData.map((d, i) => (
-                      <td key={i} className={`px-4 py-4 border-b border-slate-100 text-center font-bold ${d.lactate > 2.0 ? 'text-[#e85d22] bg-[#e85d22]/5' : 'text-slate-900'}`}>{d.lactate.toFixed(1)}</td>
+                      <td key={i} className={`px-4 py-4 border-b border-slate-100 text-center font-bold ${d.lactate > 2.0 ? 'text-[#e85d22] bg-[#e85d22]/5' : 'text-slate-900'}`}>{Number(d.lactate).toFixed(1)}</td>
                     ))}
                   </tr>
                 </tbody>
@@ -402,7 +458,7 @@ export function PatientDetail() {
                 <BrainCircuit className="w-6 h-6 text-[#3b82f6]" />
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Explainable AI (SHAP) Analysis</h2>
-                  <p className="text-sm text-slate-500 font-medium">Factors driving the {patient.riskScore}% risk prediction</p>
+                  <p className="text-sm text-slate-500 font-medium">Factors driving the {displayRiskScore}% risk prediction</p>
                 </div>
               </div>
               <div className="flex-1 min-h-[300px]">
@@ -451,7 +507,7 @@ export function PatientDetail() {
                     <p className="font-bold text-slate-900">Hemodynamic Instability Predicted</p>
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-[#e85d22] text-white px-2 py-0.5 rounded">Active</span>
                   </div>
-                  <p className="text-sm text-slate-600 mb-2">Model predicts critical event within {patient.predictedInstability}.</p>
+                  <p className="text-sm text-slate-600 mb-2">Model predicts critical event within {(patient as any).predictedInstability || '2 hours'}.</p>
                   <p className="text-xs text-slate-400 font-bold">Today, 15:42</p>
                 </div>
               </div>

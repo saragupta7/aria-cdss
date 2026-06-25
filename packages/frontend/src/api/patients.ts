@@ -1,24 +1,14 @@
-import api from './client'
-import type { Patient, HemodynamicVitals } from '@aria/shared'
+import api from "./client";
+import type { Patient } from "@aria/shared";
 
 export const patientsApi = {
-  getAll: async (): Promise<Patient[]> => {
-    const res = await api.get('/patients')
-    return res.data
+  getAll: async () => {
+    const res = await api.get("/patients");
+    return res.data.patients;
   },
 
   getById: async (id: string): Promise<Patient> => {
-    const res = await api.get(`/patients/${id}`)
-    return res.data
-  },
-
-  getVitals: async (id: string): Promise<HemodynamicVitals[]> => {
-    const res = await api.get(`/patients/${id}/vitals`)
-    return res.data
-  },
-
-  getRiskScore: async (id: string) => {
-    const res = await api.get(`/patients/${id}/risk`)
-    return res.data
-  },
-}
+    const res = await api.get(`/patients/${id}`);
+    return res.data.patient;
+  }
+};

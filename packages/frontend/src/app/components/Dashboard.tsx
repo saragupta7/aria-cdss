@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Search, Activity, AlertCircle, Droplet } from "lucide-react";
-import { patients } from "../data/patients";
+import { patientsApi } from "../../api/patients";
 import {
   BarChart,
   Bar,
@@ -15,6 +16,48 @@ import {
 } from "recharts";
 
 export function Dashboard() {
+  const [patients, setPatients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        setLoading(true);
+        const data = await patientsApi.getAll();
+        
+        const mapped = data.map((p: any) => {
+          const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+          const firstChar = p.icuBed ? p.icuBed.charAt(0).toUpperCase() : 'A';
+          const ward = ['A', 'B', 'C'].includes(firstChar) ? firstChar : 'A';
+          return {
+            ...p,
+            id: p.patientId || p._id,
+            ward,
+            bed: p.icuBed ? p.icuBed.substring(1) : '1',
+            riskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
+            vasopressor: false,
+          };
+        });
+        setPatients(mapped);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPatients();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-slate-500">Loading dashboard...</div>;
+  }
+
+  if (error) {
+    return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-red-500">{error}</div>;
+  }
+
   const wardA = patients.filter(p => p.ward === 'A');
   const wardB = patients.filter(p => p.ward === 'B');
   const wardC = patients.filter(p => p.ward === 'C');

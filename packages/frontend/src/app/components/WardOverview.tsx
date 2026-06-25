@@ -1,8 +1,51 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Building2, Users, AlertTriangle, Search, ChevronRight } from "lucide-react";
-import { patients } from "../data/patients";
+import { patientsApi } from "../../api/patients";
 
 export function WardOverview() {
+  const [patients, setPatients] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        setLoading(true);
+        const data = await patientsApi.getAll();
+        
+        const mapped = data.map((p: any) => {
+          const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+          const firstChar = p.icuBed ? p.icuBed.charAt(0).toUpperCase() : 'A';
+          const ward = ['A', 'B', 'C'].includes(firstChar) ? firstChar : 'A';
+          return {
+            ...p,
+            id: p.patientId || p._id,
+            ward,
+            bed: p.icuBed ? p.icuBed.substring(1) : '1',
+            riskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
+            vasopressor: false,
+          };
+        });
+        setPatients(mapped);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load ward data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPatients();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-slate-500">Loading ward data...</div>;
+  }
+
+  if (error) {
+    return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-red-500">{error}</div>;
+  }
+
   const wards = ['A', 'B', 'C'];
 
   const getWardStats = (ward: string) => {
