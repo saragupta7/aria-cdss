@@ -3,8 +3,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db');
+const { startEngine } = require('./services/vitalsEngine');
 
-connectDB();
 connectDB().then(() => seedUser());
 
 const app = express();
@@ -57,6 +57,9 @@ app.listen(PORT, () => {
   console.log('\nCDSS Backend Server');
   console.log(`Running on http://localhost:${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
+  
+  // Start the vitals simulation engine
+  startEngine();
   console.log('\nAvailable endpoints:');
   console.log('  POST /api/auth/register');
   console.log('  POST /api/auth/login');

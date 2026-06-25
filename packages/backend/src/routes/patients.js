@@ -32,7 +32,14 @@ router.get('/', logAction('VIEW_ALL_PATIENTS', 'Patient'), async (req, res) => {
 
 router.get('/:id', logAction('VIEW_PATIENT', 'Patient'), async (req, res) => {
     try {
-      const patient = await Patient.findById(req.params.id);
+      const mongoose = require('mongoose');
+      let patient;
+      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+        patient = await Patient.findById(req.params.id);
+      }
+      if (!patient) {
+        patient = await Patient.findOne({ patientId: req.params.id });
+      }
       if (!patient) {
         return res.status(404).json({ message: 'Patient not found' });
       }
@@ -50,7 +57,7 @@ router.get('/:id', logAction('VIEW_PATIENT', 'Patient'), async (req, res) => {
 // Only senior clinicians and admins can admit patients
 router.post('/', roleCheck('admin', 'senior'), async (req, res) => {
     try {
-      const { patientId, name, age, gender, icuBed, diagnosis } = req.body;
+      const { patientId, name, age, gender, icuBed, ward, diagnosis } = req.body;
       const bedOccupied = await Patient.findOne({ icuBed, isActive: true });
       if (bedOccupied) {
         return res.status(400).json({
@@ -63,6 +70,7 @@ router.post('/', roleCheck('admin', 'senior'), async (req, res) => {
         age,
         gender,
         icuBed,
+        ward,
         diagnosis,
         vitals: []
       });

@@ -144,4 +144,17 @@ router.get('/me', protect, async (req, res) => {
   });
 });
 
+//GET /api/auth/users
+// Get all users (admin only)
+router.get('/users', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized as admin' });
+    }
+    const users = await User.find({}).select('-password');
+    res.json({ users });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
+});
 module.exports = router;

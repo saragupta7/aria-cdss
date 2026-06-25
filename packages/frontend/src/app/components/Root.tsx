@@ -1,8 +1,18 @@
 import { Outlet, Link, useLocation } from "react-router";
-import { Activity, Bell, User, FlaskConical, BarChart3, FileText, LayoutDashboard } from "lucide-react";
+import { Activity, Bell, User, FlaskConical, BarChart3, FileText, LayoutDashboard, Users as UsersIcon } from "lucide-react";
+import { AuthProvider, useAuth } from "../context/AuthContext";
 
 export function Root() {
+  return (
+    <AuthProvider>
+      <RootLayout />
+    </AuthProvider>
+  );
+}
+
+function RootLayout() {
   const location = useLocation();
+  const { user } = useAuth();
 
   const isActive = (path: string) => {
     if (path === '/dashboard' && location.pathname === '/dashboard') return true;
@@ -28,7 +38,16 @@ export function Root() {
           <NavIcon to="/dashboard/alerts" icon={Bell} active={isActive('/dashboard/alerts')} hasBadge={true} />
           <NavIcon to="/dashboard/wards" icon={User} active={isActive('/dashboard/wards') || isActive('/dashboard/patient') || isActive('/dashboard/ward')} />
           <NavIcon to="/dashboard/simulation" icon={FlaskConical} active={isActive('/dashboard/simulation')} />
-          <NavIcon to="/dashboard/analytics" icon={BarChart3} active={isActive('/dashboard/analytics')} />
+          
+          {/* Admin / Senior specific routes */}
+          {(user?.role === 'admin' || user?.role === 'senior') && (
+            <NavIcon to="/dashboard/analytics" icon={BarChart3} active={isActive('/dashboard/analytics')} />
+          )}
+          
+          {user?.role === 'admin' && (
+            <NavIcon to="/dashboard/staff" icon={UsersIcon} active={isActive('/dashboard/staff')} />
+          )}
+
           <NavIcon to="/dashboard/audit" icon={FileText} active={isActive('/dashboard/audit')} />
         </nav>
 
@@ -41,7 +60,7 @@ export function Root() {
               : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
           }`}
         >
-          SG
+          {user ? user.name.substring(0, 2).toUpperCase() : '..'}
         </Link>
       </div>
 

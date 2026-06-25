@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Search, Activity, AlertCircle, Droplet } from "lucide-react";
 import { patientsApi } from "../../api/patients";
+import type { Patient } from "@aria/shared";
 import {
   BarChart,
   Bar,
@@ -15,8 +16,15 @@ import {
   ResponsiveContainer
 } from "recharts";
 
+const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+
+interface DashboardPatient extends Patient {
+  displayRiskLevel: string;
+  bed: string;
+}
+
 export function Dashboard() {
-  const [patients, setPatients] = useState<any[]>([]);
+  const [patients, setPatients] = useState<DashboardPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -26,17 +34,11 @@ export function Dashboard() {
         setLoading(true);
         const data = await patientsApi.getAll();
         
-        const mapped = data.map((p: any) => {
-          const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
-          const firstChar = p.icuBed ? p.icuBed.charAt(0).toUpperCase() : 'A';
-          const ward = ['A', 'B', 'C'].includes(firstChar) ? firstChar : 'A';
+        const mapped: DashboardPatient[] = data.map((p: Patient) => {
           return {
             ...p,
-            id: p.patientId || p._id,
-            ward,
-            bed: p.icuBed ? p.icuBed.substring(1) : '1',
-            riskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
-            vasopressor: false,
+            bed: p.icuBed ? p.icuBed.replace(/^[A-Z]/i, '') : '1',
+            displayRiskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
           };
         });
         setPatients(mapped);
@@ -62,10 +64,9 @@ export function Dashboard() {
   const wardB = patients.filter(p => p.ward === 'B');
   const wardC = patients.filter(p => p.ward === 'C');
 
-  const criticalCount = patients.filter(p => p.riskLevel === 'CRITICAL').length;
-  const vasopressorCount = patients.filter(p => p.vasopressor).length;
-  const stableCount = patients.filter(p => p.riskLevel === 'STABLE').length;
-  const moderateCount = patients.filter(p => p.riskLevel === 'MODERATE').length;
+  const criticalCount = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const stableCount = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
+  const moderateCount = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
   const totalPatients = patients.length;
   const activeMapAlerts = 8; 
 
@@ -146,9 +147,9 @@ export function Dashboard() {
           bgAccent="bg-[#f59e0b]/10" 
         />
         <HighlightCard 
-          title="Vasopressor" 
-          value={vasopressorCount} 
-          subtitle="Patients on Drip" 
+          title="Moderate Risk" 
+          value={moderateCount} 
+          subtitle="Patients Monitored" 
           icon={Activity} 
           accentColor="text-[#3b82f6]" 
           bgAccent="bg-[#3b82f6]/10" 
@@ -305,10 +306,10 @@ function HighlightCard({ title, value, subtitle, icon: Icon, accentColor, bgAcce
 }
 
 // Refined Ward Card
-function WardCard({ ward, patients }: { ward: string; patients: any[] }) {
-  const criticalCount = patients.filter(p => p.riskLevel === 'CRITICAL').length;
-  const moderateCount = patients.filter(p => p.riskLevel === 'MODERATE').length;
-  const stableCount = patients.filter(p => p.riskLevel === 'STABLE').length;
+function WardCard({ ward, patients }: { ward: string; patients: DashboardPatient[] }) {
+  const criticalCount = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const moderateCount = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
+  const stableCount = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all hover:border-slate-300">
@@ -344,40 +345,32 @@ function WardCard({ ward, patients }: { ward: string; patients: any[] }) {
       <div className="grid grid-cols-4 gap-4">
         {patients.map((patient) => (
           <Link
-            key={patient.id}
-            to={`/dashboard/patient/${patient.id}`}
+            key={patient.patientId}
+            to={`/dashboard/patient/${patient.patientId}`}
             className="bg-slate-50/50 rounded-xl p-4 border border-slate-200 transition-all hover:shadow-md hover:border-slate-300 group"
           >
             <div className="flex items-start justify-between mb-3">
               <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
+                patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-sm ${
-                  patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                  patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                  patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
+                  patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
                   'bg-[#e85d22] animate-pulse'
                 }`}></span>
-                {patient.riskLevel}
+                {patient.displayRiskLevel}
               </div>
-              <span className="text-[10px] font-bold text-slate-400">{patient.id}</span>
+              <span className="text-[10px] font-bold text-slate-400">{patient.patientId}</span>
             </div>
             
             <div className="text-slate-900 text-sm font-bold mb-1 group-hover:text-slate-600 transition-colors">
               {patient.name}
             </div>
             <div className="text-slate-500 text-xs font-medium">
-              {patient.age}y, {patient.gender} • Bed {patient.bed}
+              {patient.age}y, {patient.gender || 'Unknown'} • Bed {patient.bed}
             </div>
-            
-            {patient.vasopressor && (
-              <div className="mt-3 pt-3 border-t border-slate-200/60">
-                <div className="inline-flex items-center gap-1.5 text-[10px] bg-[#3b82f6]/10 text-[#3b82f6] px-2 py-1 rounded font-bold uppercase tracking-wider">
-                  <span>⚡</span> Vasopressor
-                </div>
-              </div>
-            )}
           </Link>
         ))}
       </div>

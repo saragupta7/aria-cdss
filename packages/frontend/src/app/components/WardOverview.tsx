@@ -1,44 +1,51 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Building2, Users, AlertTriangle, Search, ChevronRight } from "lucide-react";
+import { Building2, Users, AlertTriangle, Search, ChevronRight, UserPlus } from "lucide-react";
 import { patientsApi } from "../../api/patients";
+import type { Patient } from "@aria/shared";
+import { useAuth } from "../context/AuthContext";
+import { AdmitPatientModal } from "./AdmitPatientModal";
+
+const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+
+interface OverviewPatient extends Patient {
+  displayRiskLevel: string;
+  bed: string;
+}
 
 export function WardOverview() {
-  const [patients, setPatients] = useState<any[]>([]);
+  const [patients, setPatients] = useState<OverviewPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const { user } = useAuth();
+  const [showAdmitModal, setShowAdmitModal] = useState(false);
+
+  const fetchPatients = async () => {
+    try {
+      setLoading(true);
+      const data = await patientsApi.getAll();
+      
+      const mapped: OverviewPatient[] = data.map((p: Patient) => {
+        return {
+          ...p,
+          bed: p.icuBed ? p.icuBed.replace(/^[A-Z]/i, '') : '1',
+          displayRiskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
+        };
+      });
+      setPatients(mapped);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load ward data");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPatients = async () => {
-      try {
-        setLoading(true);
-        const data = await patientsApi.getAll();
-        
-        const mapped = data.map((p: any) => {
-          const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
-          const firstChar = p.icuBed ? p.icuBed.charAt(0).toUpperCase() : 'A';
-          const ward = ['A', 'B', 'C'].includes(firstChar) ? firstChar : 'A';
-          return {
-            ...p,
-            id: p.patientId || p._id,
-            ward,
-            bed: p.icuBed ? p.icuBed.substring(1) : '1',
-            riskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
-            vasopressor: false,
-          };
-        });
-        setPatients(mapped);
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load ward data");
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchPatients();
   }, []);
 
-  if (loading) {
+  if (loading && patients.length === 0) {
     return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-slate-500">Loading ward data...</div>;
   }
 
@@ -52,17 +59,17 @@ export function WardOverview() {
     const wardPatients = patients.filter(p => p.ward === ward);
     return {
       total: wardPatients.length,
-      critical: wardPatients.filter(p => p.riskLevel === 'CRITICAL').length,
-      moderate: wardPatients.filter(p => p.riskLevel === 'MODERATE').length,
-      stable: wardPatients.filter(p => p.riskLevel === 'STABLE').length,
+      critical: wardPatients.filter(p => p.displayRiskLevel === 'CRITICAL').length,
+      moderate: wardPatients.filter(p => p.displayRiskLevel === 'MODERATE').length,
+      stable: wardPatients.filter(p => p.displayRiskLevel === 'STABLE').length,
       patients: wardPatients,
     };
   };
 
   const totalPatients = patients.length;
-  const totalCritical = patients.filter(p => p.riskLevel === 'CRITICAL').length;
-  const totalModerate = patients.filter(p => p.riskLevel === 'MODERATE').length;
-  const totalStable = patients.filter(p => p.riskLevel === 'STABLE').length;
+  const totalCritical = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const totalModerate = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
+  const totalStable = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
 
   return (
     <div className="bg-slate-50/50 min-h-screen p-8">
@@ -79,13 +86,24 @@ export function WardOverview() {
               <p className="text-sm text-slate-500 font-medium">System-wide patient distribution</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-11 w-80 flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-blue-100">
-            <Search className="w-4 h-4 text-slate-400 mr-3" />
-            <input
-              type="text"
-              placeholder="Search wards or patients..."
-              className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
-            />
+          <div className="flex items-center gap-4">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-11 w-80 flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-blue-100">
+              <Search className="w-4 h-4 text-slate-400 mr-3" />
+              <input
+                type="text"
+                placeholder="Search wards or patients..."
+                className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+            {(user?.role === 'admin' || user?.role === 'senior') && (
+              <button 
+                onClick={() => setShowAdmitModal(true)}
+                className="bg-[#0f172a] text-white px-5 py-2.5 h-11 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-sm"
+              >
+                <UserPlus className="w-4 h-4" />
+                Admit Patient
+              </button>
+            )}
           </div>
         </div>
 
@@ -165,42 +183,37 @@ export function WardOverview() {
                   <div className="grid grid-cols-5 gap-4">
                     {stats.patients.map((patient) => (
                       <Link
-                        key={patient.id}
-                        to={`/dashboard/patient/${patient.id}`}
+                        key={patient.patientId}
+                        to={`/dashboard/patient/${patient.patientId}`}
                         className="bg-white rounded-xl p-4 border border-slate-200 transition-all hover:shadow-md hover:border-slate-400 flex flex-col justify-between group"
                       >
                         <div>
                           <div className="flex items-start justify-between mb-3">
                             <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                              patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                              patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                              patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
+                              patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                               'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
                             }`}>
                               <span className={`w-1.5 h-1.5 rounded-sm ${
-                                patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                                patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                                patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
+                                patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
                                 'bg-[#e85d22] animate-pulse'
                               }`}></span>
-                              {patient.riskLevel}
+                              {patient.displayRiskLevel}
                             </div>
-                            <span className="text-[10px] font-bold text-slate-400">{patient.id}</span>
+                            <span className="text-[10px] font-bold text-slate-400">{patient.patientId}</span>
                           </div>
                           
                           <div className="text-slate-900 text-sm font-bold mb-1 group-hover:text-slate-600 transition-colors">{patient.name}</div>
                           <div className="text-slate-500 text-[11px] font-medium mb-3">
-                            {patient.age}y, {patient.gender} • Bed {patient.bed}
+                            {patient.age}y, {patient.gender || 'Unknown'} • Bed {patient.bed}
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          {patient.vasopressor && (
-                            <div className="bg-[#3b82f6]/10 border border-[#3b82f6]/20 text-[#3b82f6] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-center">
-                              ⚡ Vasopressor
-                            </div>
-                          )}
-                          {patient.predictedInstability && (
+                          {(patient.riskLevel === 'high' || patient.riskLevel === 'critical') && (
                             <div className="bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#d97706] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-center">
-                              ⚠ Instability: {patient.predictedInstability}
+                              ⚠ Instability: {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
                             </div>
                           )}
                         </div>
@@ -212,6 +225,13 @@ export function WardOverview() {
             );
           })}
         </div>
+
+        {showAdmitModal && (
+          <AdmitPatientModal 
+            onClose={() => setShowAdmitModal(false)} 
+            onAdmit={() => { fetchPatients(); }} 
+          />
+        )}
       </div>
     </div>
   );

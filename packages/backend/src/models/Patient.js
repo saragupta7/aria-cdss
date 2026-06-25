@@ -39,6 +39,10 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: true 
     },
+    ward: {
+      type: String,
+      required: true
+    },
     admissionDate: {
       type: Date,
       default: Date.now

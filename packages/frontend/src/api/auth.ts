@@ -17,4 +17,14 @@ export const authApi = {
     const res = await api.get('/auth/me')
     return res.data
   },
+
+  getUsers: async () => {
+    const res = await api.get('/auth/users')
+    return res.data.users
+  },
+
+  register: async (data: any) => {
+    const res = await api.post('/auth/register', data)
+    return res.data
+  }
 }

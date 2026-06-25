@@ -17,7 +17,7 @@ const auditLogSchema = new mongoose.Schema({
   // What type of thing was affected
   resource: String,   // e.g. 'Patient', 'Alert'
 
-  resourceId: mongoose.Schema.Types.ObjectId,
+  resourceId: String, // Changed to String to support both ObjectIds and custom string IDs like 'PT-0047'
 
   details: mongoose.Schema.Types.Mixed,
 

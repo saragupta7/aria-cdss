@@ -95,11 +95,11 @@ export function PatientDetail() {
 
   const times = vitalsData.map(v => v.time);
 
-  // Map SHAP Data from Model if available, otherwise use mock based on latest vitals
-  const shapData = patient.riskScore?.shapValues || [
+  // SHAP Data — mock based on latest vitals (real SHAP values come from ML service)
+  const shapData = [
     { feature: 'Lactate Trend', impact: 45, value: `${latestVitals.lactate} mmol/L` },
     { feature: 'MAP Slope', impact: 30, value: '-4.2 mmHg/hr' },
-    { feature: 'Vasopressor', impact: 15, value: (patient as any).vasopressor ? 'Active' : 'None' },
+    { feature: 'Vasopressor', impact: 15, value: 'None' },
     { feature: 'Heart Rate', impact: 10, value: `${latestVitals.hr} bpm` },
   ];
 
@@ -109,11 +109,11 @@ export function PatientDetail() {
   ];
 
   // Helper Mappings
-  const displayRiskScore = Math.round(((patient as any).riskScore || 0) * 100);
+  const displayRiskScore = Math.round((patient.riskScore || 0) * 100);
   const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
-  const displayRiskLevel = riskLevelMap[(patient as any).riskLevel || 'low'] || 'STABLE';
-  const icuDays = (patient as any).admissionDate 
-    ? Math.max(1, Math.floor((new Date().getTime() - new Date((patient as any).admissionDate).getTime()) / (1000 * 3600 * 24)))
+  const displayRiskLevel = riskLevelMap[patient.riskLevel || 'low'] || 'STABLE';
+  const icuDays = patient.admissionDate 
+    ? Math.max(1, Math.floor((new Date().getTime() - new Date(patient.admissionDate).getTime()) / (1000 * 3600 * 24)))
     : 1;
 
   return (
@@ -121,8 +121,8 @@ export function PatientDetail() {
       
       {/* Sleek Top Banner & Breadcrumb */}
       <div className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-10 flex items-center justify-between">
-        <Link to={`/dashboard/ward/${(patient as any).ward || 'ICU'}`} className="inline-flex items-center gap-2 text-slate-500 font-bold hover:text-[#3b82f6] transition-colors text-sm">
-          <ArrowLeft className="w-4 h-4" /> Back to Ward {(patient as any).ward || 'ICU'}
+        <Link to={`/dashboard/ward/${patient.ward || 'ICU'}`} className="inline-flex items-center gap-2 text-slate-500 font-bold hover:text-[#3b82f6] transition-colors text-sm">
+          <ArrowLeft className="w-4 h-4" /> Back to Ward {patient.ward || 'ICU'}
         </Link>
         <div className="flex gap-3">
           <button className="px-5 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 shadow-sm transition-all">
@@ -154,14 +154,14 @@ export function PatientDetail() {
                   }`}></span>
                   {displayRiskLevel}
                 </span>
-                <span className="text-slate-400 font-mono text-sm tracking-widest">{(patient as any).patientId || patient.id}</span>
+                <span className="text-slate-400 font-mono text-sm tracking-widest">{patient._id}</span>
               </div>
               
               {/* Demographics Pill Row */}
               <div className="flex flex-wrap gap-2">
                 <Badge label="Age" value={`${patient.age}y`} />
-                <Badge label="Sex" value={(patient as any).gender || 'Unknown'} />
-                <Badge label="Location" value={`Ward ${(patient as any).ward || 'ICU'} • Bed ${(patient as any).icuBed || (patient as any).bed || 'Unknown'}`} />
+                <Badge label="Sex" value={patient.gender || 'Unknown'} />
+                <Badge label="Location" value={`Ward ${patient.ward || 'ICU'} • Bed ${patient.icuBed || 'Unknown'}`} />
                 <Badge label="Admitted" value={`ICU Day ${icuDays}`} />
                 <Badge label="Code" value="FULL CODE" alert={false} />
                 <Badge label="Allergies" value="NKA" alert={false} />
@@ -169,11 +169,11 @@ export function PatientDetail() {
             </div>
 
             {/* Quick System Status */}
-            {(patient as any).vasopressor && (
+            {patient.riskLevel === 'critical' && (
               <div className="bg-[#e85d22]/5 border border-[#e85d22]/20 rounded-xl p-4 text-right">
-                <p className="text-[#e85d22] text-xs font-bold uppercase tracking-wider mb-1">Active Infusion</p>
+                <p className="text-[#e85d22] text-xs font-bold uppercase tracking-wider mb-1">Critical Risk</p>
                 <p className="text-slate-900 font-bold flex items-center justify-end gap-2">
-                  <Droplets className="w-4 h-4 text-[#e85d22]" /> Norepinephrine
+                  <Droplets className="w-4 h-4 text-[#e85d22]" /> Immediate Attention
                 </p>
               </div>
             )}
@@ -240,11 +240,11 @@ export function PatientDetail() {
                   </div>
                 </div>
                 
-                {(patient as any).predictedInstability ? (
+                {patient.riskLevel === 'high' || patient.riskLevel === 'critical' ? (
                   <div className="bg-[#f59e0b]/5 rounded-2xl p-6 shadow-sm border border-[#f59e0b]/20 flex flex-col justify-center">
                     <p className="text-[#d97706] text-xs font-bold uppercase tracking-wider mb-2">Estimated Lead Time</p>
                     <div className="flex items-baseline gap-3">
-                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{(patient as any).predictedInstability}</p>
+                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}</p>
                       <p className="text-[#d97706]/70 font-medium text-sm">until critical event</p>
                     </div>
                   </div>
@@ -507,7 +507,7 @@ export function PatientDetail() {
                     <p className="font-bold text-slate-900">Hemodynamic Instability Predicted</p>
                     <span className="text-[10px] font-bold uppercase tracking-wider bg-[#e85d22] text-white px-2 py-0.5 rounded">Active</span>
                   </div>
-                  <p className="text-sm text-slate-600 mb-2">Model predicts critical event within {(patient as any).predictedInstability || '2 hours'}.</p>
+                  <p className="text-sm text-slate-600 mb-2">Model predicts critical event within {patient.riskLevel === 'critical' ? '1-2 hours' : '4-6 hours'}.</p>
                   <p className="text-xs text-slate-400 font-bold">Today, 15:42</p>
                 </div>
               </div>

@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Bell, Clock, CheckCircle2, AlertTriangle, Search } from "lucide-react";
-import { alerts } from "../data/alerts";
+import { Bell, Clock, CheckCircle2, AlertTriangle, Search, Loader2 } from "lucide-react";
+import { alertsApi } from "../../api/alerts";
+import type { Alert } from "@aria/shared";
 import {
   LineChart,
   Line,
@@ -12,9 +14,43 @@ import {
 } from "recharts";
 
 export function AlertCenter() {
-  const activeAlerts = alerts.filter(a => a.status === 'Active').length;
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchAlerts = async () => {
+    try {
+      setLoading(true);
+      const data = await alertsApi.getAll();
+      // data might be { count, alerts } or just array based on backend. Our api/alerts.ts says it expects an array or the backend returns { count, alerts }.
+      // Checking the backend route: `res.json({ count: alerts.length, alerts });`.
+      // So we should handle that in the API client or here.
+      setAlerts((data as any).alerts || data || []);
+    } catch (err) {
+      setError("Failed to fetch alerts");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+  }, []);
+
+  const handleResolve = async (id: string) => {
+    try {
+      await alertsApi.resolve(id);
+      fetchAlerts();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
+
+  const activeAlerts = alerts.filter(a => a.status === 'active').length;
   const avgResponseTime = '4.2';
-  const resolvedToday = alerts.filter(a => a.status === 'Resolved').length;
+  const resolvedToday = alerts.filter(a => a.status === 'resolved').length;
 
   const chartData = [
     { hour: '00:00', alerts: 2 },
@@ -141,7 +177,7 @@ export function AlertCenter() {
                 <tr className="border-b border-slate-100 bg-white text-xs font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-6 py-4 font-bold">Time</th>
                   <th className="px-6 py-4 font-bold">Patient</th>
-                  <th className="px-6 py-4 font-bold">Risk</th>
+                  <th className="px-6 py-4 font-bold">Severity</th>
                   <th className="px-6 py-4 font-bold">Alert Type</th>
                   <th className="px-6 py-4 font-bold">Status</th>
                   <th className="px-6 py-4 font-bold">Action</th>
@@ -149,50 +185,45 @@ export function AlertCenter() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {alerts.map((alert) => (
-                  <tr key={alert.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 text-slate-500 text-sm font-medium">{alert.timeSince}</td>
+                  <tr key={alert._id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4 text-slate-500 text-sm font-medium">{new Date(alert.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-slate-900 font-bold">{alert.patientName}</span>
-                        <span className="text-slate-500 text-xs font-medium">Bed {alert.bed} • {alert.patientId}</span>
+                        <span className="text-slate-900 font-bold">{alert.patient?.name || 'Unknown'}</span>
+                        <span className="text-slate-500 text-xs font-medium">Bed {alert.patient?.icuBed} • {alert.patient?.patientId}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                        alert.riskScore >= 75 ? 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20' :
-                        alert.riskScore >= 50 ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                        alert.severity === 'critical' ? 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20' :
+                        alert.severity === 'high' || alert.severity === 'medium' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                         'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
                       }`}>
-                        {alert.riskScore}%
+                        {alert.severity}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-800 text-sm font-bold">{alert.alertType}</td>
+                    <td className="px-6 py-4 text-slate-800 text-sm font-bold">{alert.type.replace('_', ' ')}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${
-                          alert.status === 'Active' ? 'bg-[#e85d22] animate-pulse' :
-                          alert.status === 'Acknowledged' ? 'bg-[#f59e0b]' : 'bg-[#3b82f6]'
+                          alert.status === 'active' ? 'bg-[#e85d22] animate-pulse' :
+                          alert.status === 'acknowledged' ? 'bg-[#f59e0b]' : 'bg-[#3b82f6]'
                         }`}></span>
-                        <span className="text-slate-700 text-sm font-bold">{alert.status}</span>
+                        <span className="text-slate-700 text-sm font-bold uppercase">{alert.status}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
-                          to={`/dashboard/patient/${alert.patientId}`}
+                          to={`/dashboard/patient/${alert.patient?.patientId}`}
                           className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-all"
                         >
                           View
                         </Link>
-                        {alert.status === 'Active' && (
-                          <>
-                            <button className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm">
-                              Acknowledge
-                            </button>
-                            <button className="px-3 py-1.5 bg-[#e85d22] text-white rounded-lg text-xs font-bold hover:bg-[#c24613] transition-all shadow-sm">
-                              Escalate
-                            </button>
-                          </>
+                        {alert.status === 'active' && (
+                          <button onClick={() => handleResolve(alert._id)} className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm">
+                            Resolve
+                          </button>
                         )}
                       </div>
                     </td>
