@@ -73,7 +73,7 @@ app.listen(PORT, () => {
 });
 
 const seedUser = async () => {
-  const User = require('./models/user'); 
+  const User = require('./models/User'); 
   const count = await User.countDocuments();
   if (count === 0) {
     await User.create({ 
