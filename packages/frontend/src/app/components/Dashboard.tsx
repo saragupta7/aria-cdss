@@ -1,6 +1,9 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Search, Activity, AlertCircle, Droplet } from "lucide-react";
-import { patients } from "../data/patients";
+import { patientsApi } from "../../api/patients";
+import { alertsApi } from "../../api/alerts";
+import type { Patient, Alert } from "@aria/shared";
 import {
   BarChart,
   Bar,
@@ -14,17 +17,75 @@ import {
   ResponsiveContainer
 } from "recharts";
 
-export function Dashboard() {
-  const wardA = patients.filter(p => p.ward === 'A');
-  const wardB = patients.filter(p => p.ward === 'B');
-  const wardC = patients.filter(p => p.ward === 'C');
+const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
 
-  const criticalCount = patients.filter(p => p.riskLevel === 'CRITICAL').length;
-  const vasopressorCount = patients.filter(p => p.vasopressor).length;
-  const stableCount = patients.filter(p => p.riskLevel === 'STABLE').length;
-  const moderateCount = patients.filter(p => p.riskLevel === 'MODERATE').length;
+interface DashboardPatient extends Patient {
+  displayRiskLevel: string;
+  bed: string;
+}
+
+export function Dashboard() {
+  const [patients, setPatients] = useState<DashboardPatient[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [data, alertData] = await Promise.all([
+          patientsApi.getAll(),
+          alertsApi.getAudit(),
+        ]);
+
+        const mapped: DashboardPatient[] = data.map((p: Patient) => {
+          return {
+            ...p,
+            bed: p.icuBed ? p.icuBed.replace(/^[A-Z]/i, '') : '1',
+            displayRiskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
+          };
+        });
+        setPatients(mapped);
+        setAlerts(alertData);
+      } catch (err) {
+        console.error(err);
+        setError("Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-slate-500">Loading dashboard...</div>;
+  }
+
+  if (error) {
+    return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-red-500">{error}</div>;
+  }
+
+  const q = search.trim().toLowerCase();
+  const matchesSearch = (p: DashboardPatient) =>
+    !q ||
+    p.name.toLowerCase().includes(q) ||
+    (p.patientId || "").toLowerCase().includes(q) ||
+    (p.icuBed || "").toLowerCase().includes(q) ||
+    (p.diagnosis || "").toLowerCase().includes(q) ||
+    (p.displayRiskLevel || "").toLowerCase().includes(q);
+
+  const visiblePatients = patients.filter(matchesSearch);
+  const wardA = visiblePatients.filter(p => p.ward === 'A');
+  const wardB = visiblePatients.filter(p => p.ward === 'B');
+  const wardC = visiblePatients.filter(p => p.ward === 'C');
+
+  const criticalCount = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const stableCount = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
+  const moderateCount = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
   const totalPatients = patients.length;
-  const activeMapAlerts = 8; 
+  const activeMapAlerts = alerts.filter(a => a.status === 'active').length;
 
   // Updated Palette
   const COLORS = {
@@ -40,28 +101,37 @@ export function Dashboard() {
     { name: 'Critical', value: criticalCount, color: COLORS.critical },
   ];
 
-  // Hourly data creates more bars, thinner width, and a better histogram look
-  const alertTrendData = [
-    { time: '01:00', generated: 2 },
-    { time: '02:00', generated: 3 },
-    { time: '03:00', generated: 5 },
-    { time: '04:00', generated: 4 },
-    { time: '05:00', generated: 2 },
-    { time: '06:00', generated: 6 },
-    { time: '07:00', generated: 8 },
-    { time: '08:00', generated: 7 },
-    { time: '09:00', generated: 4 },
-    { time: '10:00', generated: 3 },
-    { time: '11:00', generated: 5 },
-    { time: '12:00', generated: 4 },
-  ];
+  // Alert volume over the last 12 hours, bucketed by hour (from real alerts)
+  const now = new Date();
+  const alertTrendData = Array.from({ length: 12 }, (_, i) => {
+    const slot = new Date(now.getTime() - (11 - i) * 3600 * 1000);
+    const label = `${slot.getHours().toString().padStart(2, '0')}:00`;
+    const generated = alerts.filter(a => {
+      const t = new Date(a.createdAt);
+      return t.getFullYear() === slot.getFullYear() &&
+        t.getMonth() === slot.getMonth() &&
+        t.getDate() === slot.getDate() &&
+        t.getHours() === slot.getHours();
+    }).length;
+    return { time: label, generated };
+  });
 
-  const recentEvents = [
-    { time: '2m ago', action: 'Vasopressor started', patient: 'PT-0042', type: 'critical' },
-    { time: '15m ago', action: 'MAP Alert acknowledged', patient: 'PT-0051', type: 'moderate' },
-    { time: '1h ago', action: 'Patient stabilized', patient: 'PT-0028', type: 'stable' },
-    { time: '1h ago', action: 'Lactate labs ordered', patient: 'PT-0062', type: 'critical' },
-  ];
+  // Recent activity derived from the latest alerts
+  const timeAgo = (dateStr: string) => {
+    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+    if (diff < 1) return 'just now';
+    if (diff < 60) return `${diff}m ago`;
+    const hrs = Math.floor(diff / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+  const severityToType = (s: string) => (s === 'critical' ? 'critical' : s === 'low' ? 'stable' : 'moderate');
+  const recentEvents = alerts.slice(0, 5).map(a => ({
+    time: timeAgo(a.createdAt),
+    action: a.status === 'resolved' ? 'Alert resolved' : a.status === 'acknowledged' ? 'Alert acknowledged' : (a.type || 'alert').replace(/_/g, ' '),
+    patient: a.patient?.patientId || a.patient?.name || '—',
+    type: severityToType(a.severity),
+  }));
 
   return (
     <div className="min-h-screen p-8 max-w-[1600px] mx-auto bg-slate-50/50">
@@ -77,7 +147,9 @@ export function Dashboard() {
             <Search className="w-5 h-5 text-slate-400 mr-3" />
             <input
               type="text"
-              placeholder="Search patients, records, vitals..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search patients by name, ID, bed, or diagnosis..."
               className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
             />
           </div>
@@ -94,18 +166,18 @@ export function Dashboard() {
           accentColor="text-[#e85d22]" 
           bgAccent="bg-[#e85d22]/10" 
         />
-        <HighlightCard 
-          title="MAP Alerts" 
-          value={activeMapAlerts} 
-          subtitle="Requires Attention" 
+        <HighlightCard
+          title="Active Alerts"
+          value={activeMapAlerts}
+          subtitle="Requires Attention"
           icon={AlertCircle} 
           accentColor="text-[#f59e0b]" 
           bgAccent="bg-[#f59e0b]/10" 
         />
         <HighlightCard 
-          title="Vasopressor" 
-          value={vasopressorCount} 
-          subtitle="Patients on Drip" 
+          title="Moderate Risk" 
+          value={moderateCount} 
+          subtitle="Patients Monitored" 
           icon={Activity} 
           accentColor="text-[#3b82f6]" 
           bgAccent="bg-[#3b82f6]/10" 
@@ -199,6 +271,9 @@ export function Dashboard() {
         <div className="col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col">
           <h2 className="text-lg font-bold text-slate-900 mb-4">Recent Activity</h2>
           <div className="flex-1 flex flex-col justify-between">
+            {recentEvents.length === 0 && (
+              <p className="text-sm text-slate-400 font-medium">No recent activity</p>
+            )}
             {recentEvents.map((event, i) => (
               <div key={i} className="flex gap-3">
                 <div className="flex flex-col items-center">
@@ -262,10 +337,10 @@ function HighlightCard({ title, value, subtitle, icon: Icon, accentColor, bgAcce
 }
 
 // Refined Ward Card
-function WardCard({ ward, patients }: { ward: string; patients: any[] }) {
-  const criticalCount = patients.filter(p => p.riskLevel === 'CRITICAL').length;
-  const moderateCount = patients.filter(p => p.riskLevel === 'MODERATE').length;
-  const stableCount = patients.filter(p => p.riskLevel === 'STABLE').length;
+function WardCard({ ward, patients }: { ward: string; patients: DashboardPatient[] }) {
+  const criticalCount = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const moderateCount = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
+  const stableCount = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all hover:border-slate-300">
@@ -301,40 +376,32 @@ function WardCard({ ward, patients }: { ward: string; patients: any[] }) {
       <div className="grid grid-cols-4 gap-4">
         {patients.map((patient) => (
           <Link
-            key={patient.id}
-            to={`/dashboard/patient/${patient.id}`}
+            key={patient.patientId}
+            to={`/dashboard/patient/${patient.patientId}`}
             className="bg-slate-50/50 rounded-xl p-4 border border-slate-200 transition-all hover:shadow-md hover:border-slate-300 group"
           >
             <div className="flex items-start justify-between mb-3">
               <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
+                patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-sm ${
-                  patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                  patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                  patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
+                  patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
                   'bg-[#e85d22] animate-pulse'
                 }`}></span>
-                {patient.riskLevel}
+                {patient.displayRiskLevel}
               </div>
-              <span className="text-[10px] font-bold text-slate-400">{patient.id}</span>
+              <span className="text-[10px] font-bold text-slate-400">{patient.patientId}</span>
             </div>
             
             <div className="text-slate-900 text-sm font-bold mb-1 group-hover:text-slate-600 transition-colors">
               {patient.name}
             </div>
             <div className="text-slate-500 text-xs font-medium">
-              {patient.age}y, {patient.gender} • Bed {patient.bed}
+              {patient.age}y, {patient.gender || 'Unknown'} • Bed {patient.bed}
             </div>
-            
-            {patient.vasopressor && (
-              <div className="mt-3 pt-3 border-t border-slate-200/60">
-                <div className="inline-flex items-center gap-1.5 text-[10px] bg-[#3b82f6]/10 text-[#3b82f6] px-2 py-1 rounded font-bold uppercase tracking-wider">
-                  <span>⚡</span> Vasopressor
-                </div>
-              </div>
-            )}
           </Link>
         ))}
       </div>

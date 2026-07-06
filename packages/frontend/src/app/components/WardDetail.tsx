@@ -1,14 +1,91 @@
 import { useParams, Link } from "react-router";
-import { ArrowLeft, Users, AlertTriangle, Building2, Search } from "lucide-react";
-import { patients } from "../data/patients";
+import { ArrowLeft, Users, AlertTriangle, Building2, Search, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { patientsApi } from "../../api/patients";
+import type { Patient } from "@aria/shared";
+
+const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+
+interface WardPatient extends Patient {
+  displayRiskLevel: string;
+  bed: string;
+  icuDay: number;
+  latestVitals: { map: number; heartRate: number; spO2: number };
+  displayRiskScore: number;
+}
 
 export function WardDetail() {
   const { wardId } = useParams<{ wardId: string }>();
+  const [patients, setPatients] = useState<WardPatient[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const fetchPatients = async () => {
+      try {
+        setIsLoading(true);
+        const data = await patientsApi.getAll();
+        
+        // Transform the backend data
+        const mapped: WardPatient[] = data.map((p: Patient) => {
+          const lastVital = Array.isArray(p.vitals) && p.vitals.length > 0 ? p.vitals[p.vitals.length - 1] : null;
+          const sbp = lastVital?.bloodPressureSystolic || 120;
+          const dbp = lastVital?.bloodPressureDiastolic || 80;
+          
+          return {
+            ...p,
+            bed: p.icuBed ? p.icuBed.replace(/^[A-Z]/i, '') : '1',
+            displayRiskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
+            displayRiskScore: Math.round((p.riskScore || 0) * 100),
+            icuDay: p.admissionDate
+              ? Math.max(1, Math.floor((new Date().getTime() - new Date(p.admissionDate).getTime()) / (1000 * 3600 * 24)))
+              : 1,
+            latestVitals: {
+              map: Math.round((sbp + 2 * dbp) / 3),
+              heartRate: lastVital?.heartRate || 0,
+              spO2: lastVital?.oxygenSaturation || 0
+            }
+          };
+        });
+
+        setPatients(mapped);
+      } catch (err: any) {
+        setError("Failed to fetch patients.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPatients();
+  }, []);
+
   const wardPatients = patients.filter(p => p.ward === wardId);
 
-  const criticalCount = wardPatients.filter(p => p.riskLevel === 'CRITICAL').length;
-  const moderateCount = wardPatients.filter(p => p.riskLevel === 'MODERATE').length;
-  const stableCount = wardPatients.filter(p => p.riskLevel === 'STABLE').length;
+  const criticalCount = wardPatients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const moderateCount = wardPatients.filter(p => p.displayRiskLevel === 'MODERATE').length;
+  const stableCount = wardPatients.filter(p => p.displayRiskLevel === 'STABLE').length;
+
+  if (isLoading) {
+    return (
+      <div className="bg-slate-50/50 min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center text-slate-400">
+          <Loader2 className="w-10 h-10 animate-spin mb-4" />
+          <p className="font-medium">Loading ward details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-slate-50/50 min-h-screen flex items-center justify-center">
+        <div className="bg-red-50 text-red-600 px-6 py-4 rounded-xl border border-red-100 font-medium flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5" />
+          {error}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-50/50 min-h-screen p-8 pb-12">
@@ -48,7 +125,7 @@ export function WardDetail() {
         {/* Dense Patient Cards Grid (Matching your Image) */}
         <div className="grid grid-cols-3 gap-6">
           {wardPatients.map((patient) => (
-            <Link key={patient.id} to={`/dashboard/patient/${patient.id}`} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-[#3b82f6]/50 transition-all flex flex-col group">
+            <Link key={patient.patientId} to={`/dashboard/patient/${patient.patientId}`} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 hover:shadow-md hover:border-[#3b82f6]/50 transition-all flex flex-col group">
               
               {/* Header: Avatar & Name */}
               <div className="flex justify-between items-start mb-6">
@@ -58,15 +135,15 @@ export function WardDetail() {
                   </div>
                   <div>
                     <h3 className="font-bold text-slate-900 text-lg leading-tight group-hover:text-[#3b82f6] transition-colors">{patient.name}</h3>
-                    <p className="text-slate-500 text-xs font-medium">{patient.id}</p>
+                    <p className="text-slate-500 text-xs font-medium">{patient.patientId}</p>
                   </div>
                 </div>
                 <div className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                  patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' :
-                  patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706]' :
+                  patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' :
+                  patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706]' :
                   'bg-[#e85d22]/10 text-[#e85d22]'
                 }`}>
-                  {patient.riskLevel}
+                  {patient.displayRiskLevel}
                 </div>
               </div>
 
@@ -74,11 +151,11 @@ export function WardDetail() {
               <div className="grid grid-cols-2 gap-y-4 gap-x-2 mb-6 border-b border-slate-100 pb-6">
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">Age / Gender</p>
-                  <p className="font-bold text-slate-900 text-sm">{patient.age}y, {patient.gender}</p>
+                  <p className="font-bold text-slate-900 text-sm">{patient.age}y, {patient.gender || 'Unknown'}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">Bed</p>
-                  <p className="font-bold text-slate-900 text-sm">{patient.bed}</p>
+                  <p className="font-bold text-slate-900 text-sm">{patient.icuBed}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">ICU Day</p>
@@ -87,8 +164,8 @@ export function WardDetail() {
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">Risk Score</p>
                   <p className={`font-bold text-sm ${
-                    patient.riskLevel === 'STABLE' ? 'text-[#3b82f6]' : patient.riskLevel === 'MODERATE' ? 'text-[#f59e0b]' : 'text-[#e85d22]'
-                  }`}>{patient.riskScore}%</p>
+                    patient.displayRiskLevel === 'STABLE' ? 'text-[#3b82f6]' : patient.displayRiskLevel === 'MODERATE' ? 'text-[#f59e0b]' : 'text-[#e85d22]'
+                  }`}>{patient.displayRiskScore}%</p>
                 </div>
               </div>
 
@@ -96,28 +173,23 @@ export function WardDetail() {
               <div className="grid grid-cols-3 gap-2 mb-6">
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">MAP</p>
-                  <p className="font-bold text-slate-900 text-sm">{patient.vitals.map}</p>
+                  <p className="font-bold text-slate-900 text-sm">{patient.latestVitals.map}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">HR</p>
-                  <p className="font-bold text-slate-900 text-sm">{patient.vitals.heartRate}</p>
+                  <p className="font-bold text-slate-900 text-sm">{patient.latestVitals.heartRate}</p>
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-500 font-medium mb-0.5">SpO2</p>
-                  <p className="font-bold text-slate-900 text-sm">{patient.vitals.spO2}%</p>
+                  <p className="font-bold text-slate-900 text-sm">{patient.latestVitals.spO2}%</p>
                 </div>
               </div>
 
-              {/* Footer Actions */}
+              {/* Footer: Risk-based status */}
               <div className="mt-auto space-y-2">
-                {patient.vasopressor && (
-                  <div className="w-full text-center py-2.5 bg-[#3b82f6]/10 text-[#3b82f6] text-xs font-bold rounded-lg border border-[#3b82f6]/20">
-                    Vasopressor Active
-                  </div>
-                )}
-                {patient.predictedInstability && (
+                {(patient.riskLevel === 'high' || patient.riskLevel === 'critical') && (
                   <div className="w-full text-center py-2.5 bg-[#f59e0b]/10 text-[#d97706] text-xs font-bold rounded-lg border border-[#f59e0b]/20">
-                    Instability in {patient.predictedInstability}
+                    Instability predicted in {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
                   </div>
                 )}
               </div>

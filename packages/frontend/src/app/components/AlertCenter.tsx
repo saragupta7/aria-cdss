@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Bell, Clock, CheckCircle2, AlertTriangle, Search } from "lucide-react";
-import { alerts } from "../data/alerts";
+import { Bell, Clock, CheckCircle2, AlertTriangle, Search, Loader2 } from "lucide-react";
+import { alertsApi } from "../../api/alerts";
+import type { Alert } from "@aria/shared";
 import {
   LineChart,
   Line,
@@ -12,19 +14,99 @@ import {
 } from "recharts";
 
 export function AlertCenter() {
-  const activeAlerts = alerts.filter(a => a.status === 'Active').length;
-  const avgResponseTime = '4.2';
-  const resolvedToday = alerts.filter(a => a.status === 'Resolved').length;
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [wardFilter, setWardFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const chartData = [
-    { hour: '00:00', alerts: 2 },
-    { hour: '04:00', alerts: 1 },
-    { hour: '08:00', alerts: 4 },
-    { hour: '12:00', alerts: 3 },
-    { hour: '16:00', alerts: 5 },
-    { hour: '20:00', alerts: 2 },
-    { hour: '24:00', alerts: 4 },
-  ];
+  const fetchAlerts = async () => {
+    try {
+      setLoading(true);
+      const data = await alertsApi.getAudit(); // full history (all statuses)
+      setAlerts(data || []);
+    } catch (err) {
+      setError("Failed to fetch alerts");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+  }, []);
+
+  const handleResolve = async (id: string) => {
+    setBusyId(id);
+    try {
+      await alertsApi.resolve(id);
+      await fetchAlerts();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleAcknowledge = async (id: string) => {
+    setBusyId(id);
+    try {
+      await alertsApi.acknowledge(id);
+      await fetchAlerts();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (loading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
+
+  const wardOf = (a: Alert) => (a.patient?.icuBed ? a.patient.icuBed.charAt(0).toUpperCase() : "");
+
+  const activeAlerts = alerts.filter(a => a.status === 'active').length;
+
+  // Average acknowledgement time (minutes) from real timestamps
+  const ackMins = alerts
+    .filter(a => a.acknowledgedAt)
+    .map(a => (new Date(a.acknowledgedAt as string).getTime() - new Date(a.createdAt).getTime()) / 60000)
+    .filter(m => m >= 0);
+  const avgResponseTime = ackMins.length
+    ? (ackMins.reduce((s, x) => s + x, 0) / ackMins.length).toFixed(1)
+    : "—";
+
+  const isToday = (d?: string) => {
+    if (!d) return false;
+    const t = new Date(d);
+    const now = new Date();
+    return t.getDate() === now.getDate() && t.getMonth() === now.getMonth() && t.getFullYear() === now.getFullYear();
+  };
+  const resolvedToday = alerts.filter(a => a.status === 'resolved' && isToday(a.resolvedAt)).length;
+
+  // Alert volume over the last 24h in six 4-hour buckets, the last ending at now (from real data)
+  const now = new Date();
+  const chartData = Array.from({ length: 6 }, (_, i) => {
+    const end = new Date(now.getTime() - (5 - i) * 4 * 3600 * 1000);
+    const start = new Date(end.getTime() - 4 * 3600 * 1000);
+    const count = alerts.filter(a => {
+      const t = new Date(a.createdAt).getTime();
+      return t >= start.getTime() && t < end.getTime();
+    }).length;
+    return { hour: `${end.getHours().toString().padStart(2, '0')}:00`, alerts: count };
+  });
+
+  const filteredAlerts = alerts.filter(a => {
+    if (statusFilter !== 'all' && a.status !== statusFilter) return false;
+    if (wardFilter !== 'all' && wardOf(a) !== wardFilter) return false;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      const hay = `${a.patient?.name || ''} ${a.patient?.patientId || ''} ${a.type || ''} ${a.message || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="bg-slate-50/50 min-h-screen p-8">
@@ -45,6 +127,8 @@ export function AlertCenter() {
             <Search className="w-4 h-4 text-slate-400 mr-3" />
             <input
               type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search alert history..."
               className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
             />
@@ -60,9 +144,9 @@ export function AlertCenter() {
             colorClass="text-[#e85d22]" 
             bgClass="bg-[#e85d22]/10" 
           />
-          <CompactStatCard 
-            title="Avg Response" 
-            value={`${avgResponseTime}m`} 
+          <CompactStatCard
+            title="Avg Response"
+            value={avgResponseTime === "—" ? "—" : `${avgResponseTime}m`}
             icon={Clock} 
             colorClass="text-[#f59e0b]" 
             bgClass="bg-[#f59e0b]/10" 
@@ -123,15 +207,25 @@ export function AlertCenter() {
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <h2 className="text-base font-bold text-slate-900">Active & Recent Alerts</h2>
             <div className="flex gap-2">
-              <select className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100">
-                <option>All Wards</option>
-                <option>Ward A</option>
-                <option>Ward B</option>
+              <select
+                value={wardFilter}
+                onChange={(e) => setWardFilter(e.target.value)}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">All Wards</option>
+                <option value="A">Ward A</option>
+                <option value="B">Ward B</option>
+                <option value="C">Ward C</option>
               </select>
-              <select className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100">
-                <option>Status: All</option>
-                <option>Active</option>
-                <option>Acknowledged</option>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">Status: All</option>
+                <option value="active">Active</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
               </select>
             </div>
           </div>
@@ -141,58 +235,73 @@ export function AlertCenter() {
                 <tr className="border-b border-slate-100 bg-white text-xs font-bold text-slate-400 uppercase tracking-wider">
                   <th className="px-6 py-4 font-bold">Time</th>
                   <th className="px-6 py-4 font-bold">Patient</th>
-                  <th className="px-6 py-4 font-bold">Risk</th>
+                  <th className="px-6 py-4 font-bold">Severity</th>
                   <th className="px-6 py-4 font-bold">Alert Type</th>
                   <th className="px-6 py-4 font-bold">Status</th>
                   <th className="px-6 py-4 font-bold">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {alerts.map((alert) => (
-                  <tr key={alert.id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-6 py-4 text-slate-500 text-sm font-medium">{alert.timeSince}</td>
+                {filteredAlerts.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                      No alerts match the current filters.
+                    </td>
+                  </tr>
+                )}
+                {filteredAlerts.map((alert) => (
+                  <tr key={alert._id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4 text-slate-500 text-sm font-medium">{new Date(alert.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
-                        <span className="text-slate-900 font-bold">{alert.patientName}</span>
-                        <span className="text-slate-500 text-xs font-medium">Bed {alert.bed} • {alert.patientId}</span>
+                        <span className="text-slate-900 font-bold">{alert.patient?.name || 'Unknown'}</span>
+                        <span className="text-slate-500 text-xs font-medium">Bed {alert.patient?.icuBed} • {alert.patient?.patientId}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                        alert.riskScore >= 75 ? 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20' :
-                        alert.riskScore >= 50 ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                        alert.severity === 'critical' ? 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20' :
+                        alert.severity === 'high' || alert.severity === 'medium' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                         'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
                       }`}>
-                        {alert.riskScore}%
+                        {alert.severity}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-800 text-sm font-bold">{alert.alertType}</td>
+                    <td className="px-6 py-4 text-slate-800 text-sm font-bold">{alert.type.replace('_', ' ')}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${
-                          alert.status === 'Active' ? 'bg-[#e85d22] animate-pulse' :
-                          alert.status === 'Acknowledged' ? 'bg-[#f59e0b]' : 'bg-[#3b82f6]'
+                          alert.status === 'active' ? 'bg-[#e85d22] animate-pulse' :
+                          alert.status === 'acknowledged' ? 'bg-[#f59e0b]' : 'bg-[#3b82f6]'
                         }`}></span>
-                        <span className="text-slate-700 text-sm font-bold">{alert.status}</span>
+                        <span className="text-slate-700 text-sm font-bold uppercase">{alert.status}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
-                          to={`/dashboard/patient/${alert.patientId}`}
+                          to={`/dashboard/patient/${alert.patient?.patientId}`}
                           className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-100 transition-all"
                         >
                           View
                         </Link>
-                        {alert.status === 'Active' && (
-                          <>
-                            <button className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm">
-                              Acknowledge
-                            </button>
-                            <button className="px-3 py-1.5 bg-[#e85d22] text-white rounded-lg text-xs font-bold hover:bg-[#c24613] transition-all shadow-sm">
-                              Escalate
-                            </button>
-                          </>
+                        {alert.status === 'active' && (
+                          <button
+                            onClick={() => handleAcknowledge(alert._id)}
+                            disabled={busyId === alert._id}
+                            className="px-3 py-1.5 bg-[#3b82f6] text-white rounded-lg text-xs font-bold hover:bg-[#2563eb] transition-all shadow-sm disabled:opacity-50"
+                          >
+                            Acknowledge
+                          </button>
+                        )}
+                        {alert.status !== 'resolved' && (
+                          <button
+                            onClick={() => handleResolve(alert._id)}
+                            disabled={busyId === alert._id}
+                            className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm disabled:opacity-50"
+                          >
+                            Resolve
+                          </button>
                         )}
                       </div>
                     </td>

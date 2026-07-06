@@ -15,6 +15,14 @@ const vitalSchema = new mongoose.Schema({
   gcs: Number                      // Glasgow Coma Scale 3-15 (15 = fully alert)
 });
 
+const noteSchema = new mongoose.Schema({
+  text: { type: String, required: true, trim: true },
+  authorName: String,
+  authorRole: String,
+  author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const patientSchema = new mongoose.Schema(
   {
     patientId: {
@@ -39,6 +47,10 @@ const patientSchema = new mongoose.Schema(
       type: String,
       required: true 
     },
+    ward: {
+      type: String,
+      required: true
+    },
     admissionDate: {
       type: Date,
       default: Date.now
@@ -46,6 +58,8 @@ const patientSchema = new mongoose.Schema(
     diagnosis: String,
 
     vitals: [vitalSchema],
+
+    notes: [noteSchema],
 
     // To be Updated by the ML model
     riskScore: {

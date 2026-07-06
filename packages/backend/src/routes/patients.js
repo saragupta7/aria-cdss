@@ -32,7 +32,14 @@ router.get('/', logAction('VIEW_ALL_PATIENTS', 'Patient'), async (req, res) => {
 
 router.get('/:id', logAction('VIEW_PATIENT', 'Patient'), async (req, res) => {
     try {
-      const patient = await Patient.findById(req.params.id);
+      const mongoose = require('mongoose');
+      let patient;
+      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+        patient = await Patient.findById(req.params.id);
+      }
+      if (!patient) {
+        patient = await Patient.findOne({ patientId: req.params.id });
+      }
       if (!patient) {
         return res.status(404).json({ message: 'Patient not found' });
       }
@@ -50,7 +57,7 @@ router.get('/:id', logAction('VIEW_PATIENT', 'Patient'), async (req, res) => {
 // Only senior clinicians and admins can admit patients
 router.post('/', roleCheck('admin', 'senior'), async (req, res) => {
     try {
-      const { patientId, name, age, gender, icuBed, diagnosis } = req.body;
+      const { patientId, name, age, gender, icuBed, ward, diagnosis } = req.body;
       const bedOccupied = await Patient.findOne({ icuBed, isActive: true });
       if (bedOccupied) {
         return res.status(400).json({
@@ -63,6 +70,7 @@ router.post('/', roleCheck('admin', 'senior'), async (req, res) => {
         age,
         gender,
         icuBed,
+        ward,
         diagnosis,
         vitals: []
       });
@@ -119,7 +127,51 @@ router.post('/:id/vitals', async (req, res) => {
   }
 });
 
-// PATCH /api/patients/:id/risk 
+// GET /api/patients/:id/notes
+// Clinical notes for a patient (most recent first)
+router.get('/:id/notes', async (req, res) => {
+  try {
+    const patient = await Patient.findById(req.params.id).select('notes');
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    const notes = [...(patient.notes || [])].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    res.json({ count: notes.length, notes });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// POST /api/patients/:id/notes
+// Add a clinical note (attributed to the logged-in clinician)
+router.post('/:id/notes', logAction('ADD_NOTE', 'Patient'), async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ message: 'Note text is required' });
+    }
+    const patient = await Patient.findById(req.params.id);
+    if (!patient) {
+      return res.status(404).json({ message: 'Patient not found' });
+    }
+    const note = {
+      text: text.trim(),
+      authorName: req.user.name,
+      authorRole: req.user.role,
+      author: req.user._id,
+      createdAt: new Date()
+    };
+    patient.notes.push(note);
+    await patient.save();
+    res.status(201).json({ message: 'Note added', note });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// PATCH /api/patients/:id/risk
 // Update a patient's ML risk score
 // To be called by the Flask ML service
 // It also automatically creates an alert if the risk crosses a threshold

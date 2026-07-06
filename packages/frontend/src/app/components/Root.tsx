@@ -86,7 +86,9 @@ import {
   BarChart3,
   FileText,
   LayoutDashboard,
+  Users as UsersIcon,
 } from "lucide-react";
+import { AuthProvider, useAuth } from "../context/AuthContext";
 
 /* ============================================================
    ARIA app shell — same routes, upgraded sidebar:
@@ -95,7 +97,16 @@ import {
    ============================================================ */
 
 export function Root() {
+  return (
+    <AuthProvider>
+      <RootLayout />
+    </AuthProvider>
+  );
+}
+
+function RootLayout() {
   const location = useLocation();
+  const { user } = useAuth();
 
   const isActive = (path: string) => {
     if (path === "/dashboard" && location.pathname === "/dashboard") return true;
@@ -154,18 +165,33 @@ export function Root() {
             label="Training Sandbox"
             active={isActive("/dashboard/simulation")}
           />
-          <NavIcon
-            to="/dashboard/analytics"
-            icon={BarChart3}
-            label="Admin Analytics"
-            active={isActive("/dashboard/analytics")}
-          />
-          <NavIcon
-            to="/dashboard/audit"
-            icon={FileText}
-            label="Audit Trail"
-            active={isActive("/dashboard/audit")}
-          />
+
+          {(user?.role === "admin" || user?.role === "senior") && (
+            <NavIcon
+              to="/dashboard/analytics"
+              icon={BarChart3}
+              label="Admin Analytics"
+              active={isActive("/dashboard/analytics")}
+            />
+          )}
+
+          {user?.role === "admin" && (
+            <NavIcon
+              to="/dashboard/staff"
+              icon={UsersIcon}
+              label="Staff Management"
+              active={isActive("/dashboard/staff")}
+            />
+          )}
+
+          {user?.role === "admin" && (
+            <NavIcon
+              to="/dashboard/audit"
+              icon={FileText}
+              label="Audit Trail"
+              active={isActive("/dashboard/audit")}
+            />
+          )}
         </nav>
 
         {/* Clock + profile */}
@@ -178,7 +204,7 @@ export function Root() {
               : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white"
           }`}
         >
-          SG
+          {user ? user.name.substring(0, 2).toUpperCase() : '..'}
         </Link>
       </div>
 

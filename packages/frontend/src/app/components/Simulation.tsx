@@ -1,6 +1,11 @@
 import { useState } from "react";
-import { FlaskConical, RefreshCcw } from "lucide-react";
+import { FlaskConical, RefreshCcw, Check } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+
+interface SavedScenario {
+  id: number;
+  mapNow: number; hr: number; spo2: number; lactate: number; riskScore: number; riskLevel: string;
+}
 
 export function Simulation() {
   // States matching your Figma reference's exact values
@@ -45,8 +50,33 @@ export function Simulation() {
   ];
 
   const resetSim = () => {
-    setMapNow(70); setMap1h(70); setMap3h(70); setHr(80); setSpo2(98); 
+    setMapNow(70); setMap1h(70); setMap3h(70); setHr(80); setSpo2(98);
     setRr(16); setLactate(1.2); setCreatinine(1.0); setSbp(120); setDbp(80); setVasopressor(false);
+  };
+
+  const [scenarios, setScenarios] = useState<SavedScenario[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('aria_scenarios') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [justSaved, setJustSaved] = useState(false);
+
+  const saveScenario = () => {
+    const next = [
+      ...scenarios,
+      { id: Date.now(), mapNow, hr, spo2, lactate, riskScore, riskLevel },
+    ].slice(-10);
+    setScenarios(next);
+    localStorage.setItem('aria_scenarios', JSON.stringify(next));
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 1800);
+  };
+
+  const clearScenarios = () => {
+    setScenarios([]);
+    localStorage.removeItem('aria_scenarios');
   };
 
   return (
@@ -176,13 +206,42 @@ export function Simulation() {
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-4 pt-4">
-              <button className="py-3 border-2 border-slate-900 text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-900 hover:text-white transition-all">
-                Save as Scenario
+              <button
+                onClick={saveScenario}
+                className="py-3 border-2 border-slate-900 text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-900 hover:text-white transition-all flex items-center justify-center gap-2"
+              >
+                {justSaved ? <><Check className="w-4 h-4" /> Saved!</> : 'Save as Scenario'}
               </button>
-              <button className="py-3 border-2 border-slate-200 text-slate-400 rounded-xl font-bold text-sm cursor-not-allowed">
-                Compare Scenarios
+              <button
+                onClick={clearScenarios}
+                disabled={scenarios.length === 0}
+                className="py-3 border-2 border-slate-200 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Clear ({scenarios.length})
               </button>
             </div>
+
+            {/* Saved Scenarios */}
+            {scenarios.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                <h3 className="font-bold text-slate-900 mb-4">Saved Scenarios</h3>
+                <div className="space-y-2">
+                  {scenarios.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between text-sm border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                      <span className="text-slate-500 font-medium">
+                        MAP {s.mapNow} · HR {s.hr} · SpO2 {s.spo2} · Lac {s.lactate}
+                      </span>
+                      <span
+                        className="font-bold"
+                        style={{ color: s.riskLevel === 'CRITICAL' ? '#e85d22' : s.riskLevel === 'MODERATE' ? '#f59e0b' : '#3b82f6' }}
+                      >
+                        {s.riskScore}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
           </div>
         </div>

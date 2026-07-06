@@ -1,7 +1,10 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router";
-import { ArrowLeft, TrendingDown, TrendingUp, AlertTriangle, FileText, BrainCircuit, Activity, HeartPulse, Wind, Droplets } from "lucide-react";
-import { getPatientById } from "../data/patients";
+import { useState, useEffect } from "react";
+import { useParams, Link, useNavigate } from "react-router";
+import { ArrowLeft, TrendingDown, TrendingUp, AlertTriangle, FileText, BrainCircuit, HeartPulse, Wind, Droplets, Loader2, CheckCircle2 } from "lucide-react";
+import { patientsApi, type PatientNote } from "../../api/patients";
+import { alertsApi } from "../../api/alerts";
+import { useAuth } from "../context/AuthContext";
+import type { Patient, Alert } from "@aria/shared";
 import {
   LineChart,
   Line,
@@ -22,8 +25,71 @@ type TabType = 'Overview' | 'Flowsheet (Vitals)' | 'Trend Board' | 'SHAP' | 'Ale
 
 export function PatientDetail() {
   const { id } = useParams<{ id: string }>();
-  const patient = getPatientById(id!);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [patient, setPatient] = useState<Patient | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>('Overview');
+
+  const [patientAlerts, setPatientAlerts] = useState<Alert[]>([]);
+  const [notes, setNotes] = useState<PatientNote[]>([]);
+  const [discharging, setDischarging] = useState(false);
+
+  useEffect(() => {
+  if (!id) return;
+
+  const fetchPatient = async () => {
+    try {
+      setLoading(true);
+
+      const data = await patientsApi.getById(id);
+
+      setPatient(data);
+      // Fetch alerts + notes using the resolved Mongo _id
+      const [alerts, patientNotes] = await Promise.all([
+        alertsApi.getByPatient(data._id).catch(() => []),
+        patientsApi.getNotes(data._id).catch(() => []),
+      ]);
+      setPatientAlerts(alerts);
+      setNotes(patientNotes);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load patient");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchPatient();
+}, [id]);
+
+  const handleAddNote = async (text: string) => {
+    if (!patient) return;
+    const note = await patientsApi.addNote(patient._id, text);
+    setNotes((prev) => [note, ...prev]);
+  };
+
+  const handleDischarge = async () => {
+    if (!patient) return;
+    if (!window.confirm(`Discharge ${patient.name} from the ICU?`)) return;
+    setDischarging(true);
+    try {
+      await patientsApi.discharge(patient._id);
+      navigate(`/dashboard/ward/${patient.ward || 'A'}`);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to discharge patient");
+      setDischarging(false);
+    }
+  };
+
+  if (loading) {
+    return <div>Loading patient...</div>;
+  }
+
+  if (error) {
+    return <div>{error}</div>;
+  }
 
   if (!patient) {
     return (
@@ -36,45 +102,80 @@ export function PatientDetail() {
     );
   }
 
-  // Expanded Mock Time-Series Data for Flowsheets and Trend Boards
-  const times = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00 (Now)'];
-  const vitalsData = [
-    { time: '06:00', map: 82, hr: 88, lactate: 1.2, spo2: 98, rr: 16 },
-    { time: '08:00', map: 78, hr: 92, lactate: 1.5, spo2: 97, rr: 18 },
-    { time: '10:00', map: 75, hr: 95, lactate: 1.8, spo2: 96, rr: 20 },
-    { time: '12:00', map: 71, hr: 98, lactate: 2.1, spo2: 95, rr: 22 },
-    { time: '14:00', map: 69, hr: 104, lactate: 2.4, spo2: 93, rr: 24 },
-    { time: '16:00', map: patient.vitals.map, hr: patient.vitals.heartRate, lactate: patient.vitals.lactate, spo2: patient.vitals.spO2, rr: patient.vitals.respRate },
-  ];
+  // Map Live Time-Series Data from Database
+  const vitalsData = Array.isArray(patient.vitals) && patient.vitals.length > 0 
+    ? patient.vitals.map((v: any) => {
+        const sbp = v.bloodPressureSystolic || 120;
+        const dbp = v.bloodPressureDiastolic || 80;
+        const map = Math.round((sbp + 2 * dbp) / 3);
+        const date = new Date(v.timestamp);
+        return {
+          time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
+          map,
+          hr: v.heartRate || 0,
+          lactate: v.lactate || 0,
+          spo2: v.oxygenSaturation || 0,
+          rr: v.respiratoryRate || 0,
+          sbp,
+          dbp,
+          creatinine: v.creatinine || 1.1 // fallback
+        };
+      })
+    : [];
 
-  // Mock SHAP Explanation Data
+  const latestVitals = vitalsData.length > 0 
+    ? vitalsData[vitalsData.length - 1] 
+    : { map: 0, hr: 0, spo2: 0, rr: 0, sbp: 0, dbp: 0, lactate: 0, creatinine: 0 };
+
+  const times = vitalsData.map(v => v.time);
+
+  // Risk driver breakdown computed from the patient's actual latest vitals
+  // (heuristic contribution of each parameter's deviation from safe range).
   const shapData = [
-    { feature: 'Lactate Trend', impact: 45, value: `${patient.vitals.lactate} mmol/L` },
-    { feature: 'MAP Slope', impact: 30, value: '-4.2 mmHg/hr' },
-    { feature: 'Vasopressor', impact: 15, value: patient.vasopressor ? 'Active' : 'None' },
-    { feature: 'Heart Rate', impact: 10, value: `${patient.vitals.heartRate} bpm` },
-  ];
+    { feature: 'MAP', impact: latestVitals.map < 65 ? 40 : latestVitals.map < 70 ? 22 : 6, value: `${latestVitals.map} mmHg` },
+    { feature: 'Lactate', impact: latestVitals.lactate > 4 ? 35 : latestVitals.lactate > 2 ? 20 : 5, value: `${Number(latestVitals.lactate).toFixed(1)} mmol/L` },
+    { feature: 'SpO2', impact: latestVitals.spo2 && latestVitals.spo2 < 90 ? 30 : latestVitals.spo2 && latestVitals.spo2 < 94 ? 15 : 5, value: `${latestVitals.spo2}%` },
+    { feature: 'Heart Rate', impact: latestVitals.hr > 110 ? 25 : latestVitals.hr > 100 ? 12 : 5, value: `${latestVitals.hr} bpm` },
+    { feature: 'Resp Rate', impact: latestVitals.rr > 22 ? 20 : latestVitals.rr > 18 ? 10 : 4, value: `${latestVitals.rr} /min` },
+  ].sort((a, b) => b.impact - a.impact);
 
-  const notesData = [
-    { time: '15:30 today', author: 'Dr. Sarah G.', text: 'Patient showing signs of decreasing MAP despite fluid resuscitation. Starting low-dose vasopressor.' },
-    { time: '12:15 today', author: 'Nurse Michael R.', text: 'Lactate labs drawn and sent to path. Patient resting comfortably.' },
-  ];
+  const readingsCount = vitalsData.length;
+  const lastUpdated = patient.vitals?.length
+    ? new Date(patient.vitals[patient.vitals.length - 1].timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  // Helper Mappings
+  const displayRiskScore = Math.round((patient.riskScore || 0) * 100);
+  const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
+  const displayRiskLevel = riskLevelMap[patient.riskLevel || 'low'] || 'STABLE';
+  const icuDays = patient.admissionDate 
+    ? Math.max(1, Math.floor((new Date().getTime() - new Date(patient.admissionDate).getTime()) / (1000 * 3600 * 24)))
+    : 1;
 
   return (
     <div className="bg-slate-50/50 min-h-screen pb-12">
       
       {/* Sleek Top Banner & Breadcrumb */}
       <div className="bg-white border-b border-slate-200 px-8 py-4 sticky top-0 z-10 flex items-center justify-between">
-        <Link to={`/dashboard/ward/${patient.ward}`} className="inline-flex items-center gap-2 text-slate-500 font-bold hover:text-[#3b82f6] transition-colors text-sm">
-          <ArrowLeft className="w-4 h-4" /> Back to Ward {patient.ward}
+        <Link to={`/dashboard/ward/${patient.ward || 'ICU'}`} className="inline-flex items-center gap-2 text-slate-500 font-bold hover:text-[#3b82f6] transition-colors text-sm">
+          <ArrowLeft className="w-4 h-4" /> Back to Ward {patient.ward || 'ICU'}
         </Link>
         <div className="flex gap-3">
-          <button className="px-5 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 shadow-sm transition-all">
-            Edit Patient
+          <button
+            onClick={() => setActiveTab('Notes')}
+            className="px-5 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 shadow-sm transition-all flex items-center gap-2"
+          >
+            <FileText className="w-4 h-4" /> Add Note
           </button>
-          <button className="px-5 py-2 bg-[#3b82f6] text-white rounded-lg text-sm font-bold hover:bg-[#2563eb] shadow-sm transition-all flex items-center gap-2">
-            <Activity className="w-4 h-4" /> Clinical Action
-          </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={handleDischarge}
+              disabled={discharging}
+              className="px-5 py-2 bg-[#e85d22] text-white rounded-lg text-sm font-bold hover:bg-[#d24e17] shadow-sm transition-all flex items-center gap-2 disabled:opacity-50"
+            >
+              {discharging ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Discharge
+            </button>
+          )}
         </div>
       </div>
 
@@ -87,37 +188,37 @@ export function PatientDetail() {
               <div className="flex items-center gap-4 mb-3">
                 <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{patient.name}</h1>
                 <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
-                  patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                  patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                  displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
+                  displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
                   'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
                 }`}>
                   <span className={`w-2 h-2 rounded-sm mr-2 ${
-                    patient.riskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                    patient.riskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                    displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
+                    displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
                     'bg-[#e85d22] animate-pulse'
                   }`}></span>
-                  {patient.riskLevel}
+                  {displayRiskLevel}
                 </span>
-                <span className="text-slate-400 font-mono text-sm tracking-widest">{patient.id}</span>
+                <span className="text-slate-400 font-mono text-sm tracking-widest">{patient._id}</span>
               </div>
               
               {/* Demographics Pill Row */}
               <div className="flex flex-wrap gap-2">
                 <Badge label="Age" value={`${patient.age}y`} />
-                <Badge label="Sex" value={patient.gender === 'M' ? 'Male' : 'Female'} />
-                <Badge label="Location" value={`Ward ${patient.ward} • Bed ${patient.bed}`} />
-                <Badge label="Admitted" value={`ICU Day ${patient.icuDay}`} />
+                <Badge label="Sex" value={patient.gender || 'Unknown'} />
+                <Badge label="Location" value={`Ward ${patient.ward || 'ICU'} • Bed ${patient.icuBed || 'Unknown'}`} />
+                <Badge label="Admitted" value={`ICU Day ${icuDays}`} />
                 <Badge label="Code" value="FULL CODE" alert={false} />
                 <Badge label="Allergies" value="NKA" alert={false} />
               </div>
             </div>
 
             {/* Quick System Status */}
-            {patient.vasopressor && (
+            {patient.riskLevel === 'critical' && (
               <div className="bg-[#e85d22]/5 border border-[#e85d22]/20 rounded-xl p-4 text-right">
-                <p className="text-[#e85d22] text-xs font-bold uppercase tracking-wider mb-1">Active Infusion</p>
+                <p className="text-[#e85d22] text-xs font-bold uppercase tracking-wider mb-1">Critical Risk</p>
                 <p className="text-slate-900 font-bold flex items-center justify-end gap-2">
-                  <Droplets className="w-4 h-4 text-[#e85d22]" /> Norepinephrine
+                  <Droplets className="w-4 h-4 text-[#e85d22]" /> Immediate Attention
                 </p>
               </div>
             )}
@@ -153,19 +254,19 @@ export function PatientDetail() {
                   </span>
                 </div>
                 <div className="space-y-1">
-                  <VitalRow label="MAP" value={patient.vitals.map} unit="mmHg" trend="down" statusColor={patient.vitals.map < 65 ? "text-[#e85d22]" : undefined} />
-                  <VitalRow label="Heart Rate" value={patient.vitals.heartRate} unit="bpm" trend="up" />
-                  <VitalRow label="SpO2" value={patient.vitals.spO2} unit="%" />
-                  <VitalRow label="Resp Rate" value={patient.vitals.respRate} unit="bpm" />
-                  <VitalRow label="Blood Pressure" value={`${patient.vitals.sbp}/${patient.vitals.dbp}`} unit="mmHg" />
+                  <VitalRow label="MAP" value={latestVitals.map} unit="mmHg" trend="down" statusColor={latestVitals.map < 65 ? "text-[#e85d22]" : undefined} />
+                  <VitalRow label="Heart Rate" value={latestVitals.hr} unit="bpm" trend="up" />
+                  <VitalRow label="SpO2" value={latestVitals.spo2} unit="%" />
+                  <VitalRow label="Resp Rate" value={latestVitals.rr} unit="bpm" />
+                  <VitalRow label="Blood Pressure" value={`${latestVitals.sbp}/${latestVitals.dbp}`} unit="mmHg" />
                 </div>
               </div>
 
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                 <h3 className="text-slate-900 font-bold text-lg mb-4">Recent Labs</h3>
                 <div className="space-y-1">
-                  <VitalRow label="Lactate" value={patient.vitals.lactate} unit="mmol/L" trend="up" statusColor={patient.vitals.lactate > 2.0 ? "text-[#e85d22]" : undefined} />
-                  <VitalRow label="Creatinine" value={patient.vitals.creatinine} unit="mg/dL" />
+                  <VitalRow label="Lactate" value={Number(latestVitals.lactate).toFixed(1)} unit="mmol/L" trend="up" statusColor={latestVitals.lactate > 2.0 ? "text-[#e85d22]" : undefined} />
+                  <VitalRow label="SpO2" value={latestVitals.spo2} unit="%" statusColor={latestVitals.spo2 && latestVitals.spo2 < 94 ? "text-[#e85d22]" : undefined} />
                 </div>
               </div>
             </div>
@@ -176,26 +277,26 @@ export function PatientDetail() {
                   <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">AI Risk Score</p>
                   <div className="flex items-baseline gap-3">
                     <p className={`text-5xl font-bold leading-none ${
-                      patient.riskScore >= 75 ? 'text-[#e85d22]' :
-                      patient.riskScore >= 50 ? 'text-[#f59e0b]' :
+                      displayRiskScore >= 75 ? 'text-[#e85d22]' :
+                      displayRiskScore >= 50 ? 'text-[#f59e0b]' :
                       'text-[#3b82f6]'
-                    }`}>{patient.riskScore}%</p>
+                    }`}>{displayRiskScore}%</p>
                     <p className="text-slate-400 font-medium text-sm">instability probability</p>
                   </div>
                 </div>
                 
-                {patient.predictedInstability ? (
+                {patient.riskLevel === 'high' || patient.riskLevel === 'critical' ? (
                   <div className="bg-[#f59e0b]/5 rounded-2xl p-6 shadow-sm border border-[#f59e0b]/20 flex flex-col justify-center">
                     <p className="text-[#d97706] text-xs font-bold uppercase tracking-wider mb-2">Estimated Lead Time</p>
                     <div className="flex items-baseline gap-3">
-                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{patient.predictedInstability}</p>
+                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}</p>
                       <p className="text-[#d97706]/70 font-medium text-sm">until critical event</p>
                     </div>
                   </div>
                 ) : (
                   <div className="bg-[#3b82f6]/5 rounded-2xl p-6 shadow-sm border border-[#3b82f6]/10 flex flex-col justify-center">
                     <p className="text-[#3b82f6] text-xs font-bold uppercase tracking-wider mb-2">Clinical Status</p>
-                    <p className="text-2xl font-bold text-[#3b82f6]">Currently Stable</p>
+                    <p className="text-2xl font-bold text-[#3b82f6]">{displayRiskLevel === 'STABLE' ? 'Currently Stable' : 'Monitor Closely'}</p>
                   </div>
                 )}
               </div>
@@ -277,7 +378,7 @@ export function PatientDetail() {
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 border-b border-slate-100 border-r text-slate-700 font-bold bg-slate-50/30">Lactate (mmol/L)</td>
                     {vitalsData.map((d, i) => (
-                      <td key={i} className={`px-4 py-4 border-b border-slate-100 text-center font-bold ${d.lactate > 2.0 ? 'text-[#e85d22] bg-[#e85d22]/5' : 'text-slate-900'}`}>{d.lactate.toFixed(1)}</td>
+                      <td key={i} className={`px-4 py-4 border-b border-slate-100 text-center font-bold ${d.lactate > 2.0 ? 'text-[#e85d22] bg-[#e85d22]/5' : 'text-slate-900'}`}>{Number(d.lactate).toFixed(1)}</td>
                     ))}
                   </tr>
                 </tbody>
@@ -372,21 +473,27 @@ export function PatientDetail() {
                 </div>
               </div>
 
-              {/* Lab Highlights Widget */}
+              {/* Lab Highlights Widget — from the patient's latest recorded values */}
               <div className="bg-[#3b82f6]/5 rounded-2xl p-6 border border-[#3b82f6]/20">
-                <h3 className="font-bold text-[#0f172a] mb-4">Latest Lab Flags</h3>
+                <h3 className="font-bold text-[#0f172a] mb-4">Latest Labs</h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-slate-600 text-sm font-bold">Creatinine</span>
-                    <span className="font-bold text-[#e85d22]">1.6 mg/dL ↑</span>
+                    <span className="text-slate-600 text-sm font-bold">Lactate</span>
+                    <span className={`font-bold ${latestVitals.lactate > 2.0 ? 'text-[#e85d22]' : 'text-slate-900'}`}>
+                      {Number(latestVitals.lactate).toFixed(1)} mmol/L {latestVitals.lactate > 2.0 ? '↑' : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-slate-600 text-sm font-bold">WBC</span>
-                    <span className="font-bold text-[#e85d22]">14.2 K/uL ↑</span>
+                    <span className="text-slate-600 text-sm font-bold">MAP</span>
+                    <span className={`font-bold ${latestVitals.map < 65 ? 'text-[#e85d22]' : 'text-slate-900'}`}>
+                      {latestVitals.map} mmHg {latestVitals.map < 65 ? '↓' : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
-                    <span className="text-slate-600 text-sm font-bold">Hemoglobin</span>
-                    <span className="font-bold text-slate-900">11.4 g/dL</span>
+                    <span className="text-slate-600 text-sm font-bold">SpO2</span>
+                    <span className={`font-bold ${latestVitals.spo2 && latestVitals.spo2 < 94 ? 'text-[#e85d22]' : 'text-slate-900'}`}>
+                      {latestVitals.spo2}% {latestVitals.spo2 && latestVitals.spo2 < 94 ? '↓' : ''}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -402,7 +509,7 @@ export function PatientDetail() {
                 <BrainCircuit className="w-6 h-6 text-[#3b82f6]" />
                 <div>
                   <h2 className="text-lg font-bold text-slate-900">Explainable AI (SHAP) Analysis</h2>
-                  <p className="text-sm text-slate-500 font-medium">Factors driving the {patient.riskScore}% risk prediction</p>
+                  <p className="text-sm text-slate-500 font-medium">Factors driving the {displayRiskScore}% risk prediction</p>
                 </div>
               </div>
               <div className="flex-1 min-h-[300px]">
@@ -420,9 +527,9 @@ export function PatientDetail() {
             
             <div className="col-span-4 space-y-4">
               <div className="bg-[#3b82f6]/5 rounded-2xl p-6 border border-[#3b82f6]/20">
-                <h3 className="font-bold text-slate-900 mb-2">Model Confidence</h3>
-                <p className="text-3xl font-bold text-[#3b82f6]">94.2%</p>
-                <p className="text-xs text-slate-500 font-medium mt-1">Based on XGBoost clinical model</p>
+                <h3 className="font-bold text-slate-900 mb-2">Prediction Basis</h3>
+                <p className="text-3xl font-bold text-[#3b82f6]">{readingsCount} <span className="text-base font-medium text-slate-500">readings</span></p>
+                <p className="text-xs text-slate-500 font-medium mt-1">Last updated at {lastUpdated}</p>
               </div>
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                 <h3 className="font-bold text-slate-900 mb-4">Key Drivers</h3>
@@ -443,50 +550,52 @@ export function PatientDetail() {
         {activeTab === 'Alerts' && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden p-6">
             <h2 className="text-lg font-bold text-slate-900 mb-6">Patient Alert History</h2>
-            <div className="space-y-4">
-              <div className="flex items-start gap-4 p-4 rounded-xl border border-[#e85d22]/30 bg-[#e85d22]/5">
-                <AlertTriangle className="w-5 h-5 text-[#e85d22] shrink-0 mt-0.5" />
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <p className="font-bold text-slate-900">Hemodynamic Instability Predicted</p>
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-[#e85d22] text-white px-2 py-0.5 rounded">Active</span>
-                  </div>
-                  <p className="text-sm text-slate-600 mb-2">Model predicts critical event within {patient.predictedInstability}.</p>
-                  <p className="text-xs text-slate-400 font-bold">Today, 15:42</p>
-                </div>
+            {patientAlerts.length === 0 ? (
+              <div className="flex items-center gap-3 p-6 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 font-medium">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                No alerts recorded for this patient.
               </div>
-              <div className="flex items-start gap-4 p-4 rounded-xl border border-slate-200">
-                <AlertTriangle className="w-5 h-5 text-[#f59e0b] shrink-0 mt-0.5" />
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <p className="font-bold text-slate-900">MAP Trending Down</p>
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-2 py-0.5 rounded">Acknowledged</span>
-                  </div>
-                  <p className="text-sm text-slate-600 mb-2">MAP dropped below 70 mmHg for 2 consecutive readings.</p>
-                  <p className="text-xs text-slate-400 font-bold">Today, 14:10</p>
-                </div>
+            ) : (
+              <div className="space-y-4">
+                {patientAlerts.map((alert) => {
+                  const isCrit = alert.severity === 'critical';
+                  return (
+                    <div
+                      key={alert._id}
+                      className={`flex items-start gap-4 p-4 rounded-xl border ${
+                        alert.status === 'active' && isCrit ? 'border-[#e85d22]/30 bg-[#e85d22]/5' : 'border-slate-200'
+                      }`}
+                    >
+                      <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${isCrit ? 'text-[#e85d22]' : 'text-[#f59e0b]'}`} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <p className="font-bold text-slate-900">{(alert.type || 'alert').replace(/_/g, ' ')}</p>
+                          <span
+                            className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                              alert.status === 'active' ? 'bg-[#e85d22] text-white' :
+                              alert.status === 'acknowledged' ? 'bg-[#f59e0b]/20 text-[#d97706]' :
+                              'bg-slate-100 text-slate-500'
+                            }`}
+                          >
+                            {alert.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600 mb-2">{alert.message}</p>
+                        <p className="text-xs text-slate-400 font-bold">
+                          {new Date(alert.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
+            )}
           </div>
         )}
 
         {/* TAB 6: NOTES */}
         {activeTab === 'Notes' && (
-          <div className="grid grid-cols-1 gap-4 max-w-3xl">
-            <button className="flex items-center justify-center gap-2 w-full p-4 border-2 border-dashed border-slate-300 rounded-2xl text-slate-500 font-bold hover:bg-slate-50 hover:border-[#3b82f6] hover:text-[#3b82f6] transition-all">
-              <FileText className="w-5 h-5" />
-              Add Clinical Note
-            </button>
-            {notesData.map((note, i) => (
-              <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-2">
-                  <p className="font-bold text-slate-900">{note.author}</p>
-                  <p className="text-xs text-slate-400 font-bold">{note.time}</p>
-                </div>
-                <p className="text-sm text-slate-600 leading-relaxed">{note.text}</p>
-              </div>
-            ))}
-          </div>
+          <NotesTab notes={notes} onAdd={handleAddNote} />
         )}
 
       </div>
@@ -504,6 +613,71 @@ function Badge({ label, value, alert = false }: { label: string, value: string, 
       <span className={`px-3 py-1.5 text-sm font-bold ${alert ? 'text-[#e85d22]' : 'text-slate-900'}`}>
         {value}
       </span>
+    </div>
+  );
+}
+
+// Notes tab — real clinical notes backed by the API
+function NotesTab({ notes, onAdd }: { notes: PatientNote[]; onAdd: (text: string) => Promise<void> }) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await onAdd(text.trim());
+      setText("");
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to add note");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-4 max-w-3xl">
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={3}
+          placeholder="Add a clinical note..."
+          className="w-full resize-none border border-slate-200 rounded-xl p-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#3b82f6]/30 focus:border-[#3b82f6]"
+        />
+        {error && <p className="text-sm text-red-600 font-medium mt-2">{error}</p>}
+        <div className="flex justify-end mt-3">
+          <button
+            onClick={submit}
+            disabled={saving || !text.trim()}
+            className="flex items-center gap-2 px-5 py-2 bg-[#3b82f6] text-white rounded-xl font-bold text-sm hover:bg-[#2563eb] transition-all disabled:opacity-50"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            <FileText className="w-4 h-4" /> Save Note
+          </button>
+        </div>
+      </div>
+
+      {notes.length === 0 ? (
+        <p className="text-sm text-slate-400 font-medium text-center py-6">No notes yet. Add the first clinical note above.</p>
+      ) : (
+        notes.map((note, i) => (
+          <div key={note._id || i} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-2">
+              <p className="font-bold text-slate-900">
+                {note.authorName || 'Unknown'}
+                {note.authorRole && <span className="ml-2 text-xs font-medium text-slate-400 uppercase tracking-wider">{note.authorRole}</span>}
+              </p>
+              <p className="text-xs text-slate-400 font-bold">
+                {new Date(note.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            </div>
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap">{note.text}</p>
+          </div>
+        ))
+      )}
     </div>
   );
 }

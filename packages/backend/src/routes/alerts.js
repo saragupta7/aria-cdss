@@ -12,18 +12,23 @@ router.use(protect);
 
 router.get('/', async (req, res) => {
   try {
-    const { status } = req.query;  // optional: ?status=active or ?status=resolved
+    const { status, patient } = req.query;  // ?status=active|resolved|all, ?patient=<id>
     const filter = {};
-    if (status) {
+    // status=all (or an explicit patient query) returns every status; otherwise default to active
+    if (status && status !== 'all') {
       filter.status = status;
-    } else {
+    } else if (!status && !patient) {
       filter.status = 'active';  // default: only show active alerts
+    }
+    if (patient) {
+      filter.patient = patient;
     }
     const alerts = await Alert
       .find(filter)
-      .populate('patient', 'name icuBed patientId')  
-      .populate('acknowledgedBy', 'name role')       
-      .sort({ createdAt: -1 });               
+      .populate('patient', 'name icuBed patientId')
+      .populate('acknowledgedBy', 'name role')
+      .populate('resolvedBy', 'name role')
+      .sort({ createdAt: -1 });
 
     res.json({ count: alerts.length, alerts });
   } catch (error) {

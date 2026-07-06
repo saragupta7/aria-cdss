@@ -11,6 +11,7 @@ import { WardDetail } from "./components/WardDetail";
 import { WardOverview } from "./components/WardOverview";
 import { Landing } from "./components/Landing";
 import { Login } from "./components/Login";
+import { StaffManagement } from "./components/StaffManagement";
 
 export const router = createBrowserRouter([
   {
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
       { path: "audit", Component: AuditTrail },
       { path: "profile", Component: Profile },
       { path: "ward/:wardId", Component: WardDetail },
+      { path: "staff", Component: StaffManagement },
     ],
   },
 ]);
