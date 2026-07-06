@@ -129,15 +129,21 @@ export function PatientDetail() {
 
   const times = vitalsData.map(v => v.time);
 
-  // Risk driver breakdown computed from the patient's actual latest vitals
-  // (heuristic contribution of each parameter's deviation from safe range).
-  const shapData = [
+  // Prefer real SHAP output from the HemoAlert ml-service (patient.riskShap);
+  // fall back to a client-side heuristic when the model hasn't scored this
+  // patient yet (e.g. ml-service not running / not trained).
+  const heuristicShapData = [
     { feature: 'MAP', impact: latestVitals.map < 65 ? 40 : latestVitals.map < 70 ? 22 : 6, value: `${latestVitals.map} mmHg` },
     { feature: 'Lactate', impact: latestVitals.lactate > 4 ? 35 : latestVitals.lactate > 2 ? 20 : 5, value: `${Number(latestVitals.lactate).toFixed(1)} mmol/L` },
     { feature: 'SpO2', impact: latestVitals.spo2 && latestVitals.spo2 < 90 ? 30 : latestVitals.spo2 && latestVitals.spo2 < 94 ? 15 : 5, value: `${latestVitals.spo2}%` },
     { feature: 'Heart Rate', impact: latestVitals.hr > 110 ? 25 : latestVitals.hr > 100 ? 12 : 5, value: `${latestVitals.hr} bpm` },
     { feature: 'Resp Rate', impact: latestVitals.rr > 22 ? 20 : latestVitals.rr > 18 ? 10 : 4, value: `${latestVitals.rr} /min` },
   ].sort((a, b) => b.impact - a.impact);
+
+  const shapData = patient.riskShap && patient.riskShap.length > 0
+    ? patient.riskShap
+    : heuristicShapData;
+  const isRealShap = Boolean(patient.riskShap && patient.riskShap.length > 0);
 
   const readingsCount = vitalsData.length;
   const lastUpdated = patient.vitals?.length
@@ -507,10 +513,15 @@ export function PatientDetail() {
             <div className="col-span-8 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col">
               <div className="flex items-center gap-3 mb-6">
                 <BrainCircuit className="w-6 h-6 text-[#3b82f6]" />
-                <div>
+                <div className="flex-1">
                   <h2 className="text-lg font-bold text-slate-900">Explainable AI (SHAP) Analysis</h2>
                   <p className="text-sm text-slate-500 font-medium">Factors driving the {displayRiskScore}% risk prediction</p>
                 </div>
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md ${
+                  isRealShap ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200'
+                }`}>
+                  {isRealShap ? 'HemoAlert model' : 'Heuristic estimate'}
+                </span>
               </div>
               <div className="flex-1 min-h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">

@@ -1,9 +1,52 @@
 const Patient = require('../models/Patient');
 const Alert = require('../models/Alert');
 
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
+const ML_TIMEOUT_MS = 3000;
+
+// --- Mock ML fallback — used whenever ml-service is unreachable or has no
+// model loaded yet, so the app keeps working before HemoAlert is trained.
+function mockRiskScore(map, newHR, newSpO2) {
+  let riskScore = 0.1;
+  if (map < 65) riskScore += 0.4;
+  else if (map < 70) riskScore += 0.2;
+
+  if (newHR > 110) riskScore += 0.2;
+  if (newSpO2 < 90) riskScore += 0.3;
+
+  return Math.min(0.99, riskScore);
+}
+
+function riskLevelFromScore(score) {
+  return score >= 0.8 ? 'critical' : score >= 0.6 ? 'high' : score >= 0.2 ? 'medium' : 'low';
+}
+
+// Ask the HemoAlert ml-service to score this patient from their vitals
+// history. Returns null (rather than throwing) on any failure — timeout,
+// connection refused, no model loaded (503) — so callers can fall back
+// to the mock formula without the simulation tick ever crashing.
+async function getMlPrediction(patient) {
+  try {
+    const res = await fetch(`${ML_SERVICE_URL}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        admissionDate: patient.admissionDate,
+        vitalsHistory: patient.vitals
+      }),
+      signal: AbortSignal.timeout(ML_TIMEOUT_MS)
+    });
+
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null; // ml-service down/unreachable/timed out — fall back silently
+  }
+}
+
 const startEngine = () => {
   console.log('🧪 Live Vitals Simulation Engine Started');
-  
+
   // Run every 60 seconds
   setInterval(async () => {
     try {
@@ -14,9 +57,13 @@ const startEngine = () => {
 
       for (const patient of activePatients) {
         // Grab the last vital or generate base
-        const lastVital = patient.vitals.length > 0 
-          ? patient.vitals[patient.vitals.length - 1] 
-          : { heartRate: 80, bloodPressureSystolic: 120, bloodPressureDiastolic: 80, oxygenSaturation: 98, respiratoryRate: 16, temperature: 37 };
+        const lastVital = patient.vitals.length > 0
+          ? patient.vitals[patient.vitals.length - 1]
+          : {
+              heartRate: 80, bloodPressureSystolic: 120, bloodPressureDiastolic: 80,
+              oxygenSaturation: 98, respiratoryRate: 16, temperature: 37,
+              creatinine: 1.0, bicarbonate: 24, bun: 14, vasopressorOn: false
+            };
 
         // Add some random noise
         const hrDelta = Math.floor(Math.random() * 7) - 3; // -3 to +3
@@ -27,6 +74,23 @@ const startEngine = () => {
         const newSBP = Math.max(60, Math.min(200, (lastVital.bloodPressureSystolic || 120) + sbpDelta));
         const newDBP = Math.max(30, Math.min(120, (lastVital.bloodPressureDiastolic || 80) + Math.floor(sbpDelta / 2)));
         const newSpO2 = Math.max(70, Math.min(100, (lastVital.oxygenSaturation || 98) + o2Delta));
+        const map = (newSBP + 2 * newDBP) / 3;
+
+        // Labs drift slowly — these aren't resampled every tick in real ICUs
+        const newCreatinine = Math.max(0.4, (lastVital.creatinine ?? 1.0) + (Math.random() * 0.1 - 0.05));
+        const newBicarbonate = Math.max(10, Math.min(32, (lastVital.bicarbonate ?? 24) + (Math.random() * 0.8 - 0.4)));
+        const newBun = Math.max(5, (lastVital.bun ?? 14) + (Math.random() * 1.2 - 0.5));
+
+        // Vasopressor: start when hemodynamics are failing, wean once MAP recovers
+        let vasopressorOn = !!lastVital.vasopressorOn;
+        let vasopressorAgent = lastVital.vasopressorAgent || null;
+        if (!vasopressorOn && map < 65 && Math.random() < 0.35) {
+          vasopressorOn = true;
+          vasopressorAgent = 'norepinephrine';
+        } else if (vasopressorOn && map > 75 && Math.random() < 0.4) {
+          vasopressorOn = false;
+          vasopressorAgent = null;
+        }
 
         const newVital = {
           timestamp: new Date(),
@@ -35,7 +99,12 @@ const startEngine = () => {
           bloodPressureDiastolic: newDBP,
           oxygenSaturation: newSpO2,
           respiratoryRate: lastVital.respiratoryRate,
-          temperature: lastVital.temperature
+          temperature: lastVital.temperature,
+          creatinine: newCreatinine,
+          bicarbonate: newBicarbonate,
+          bun: newBun,
+          vasopressorOn,
+          vasopressorAgent
         };
 
         patient.vitals.push(newVital);
@@ -43,19 +112,18 @@ const startEngine = () => {
           patient.vitals.shift(); // keep it small for this demo
         }
 
-        // --- Mock ML Risk Calculation ---
-        let riskScore = 0.1; // base risk 10%
-        const map = (newSBP + 2 * newDBP) / 3;
-        
-        if (map < 65) riskScore += 0.4;
-        else if (map < 70) riskScore += 0.2;
-        
-        if (newHR > 110) riskScore += 0.2;
-        if (newSpO2 < 90) riskScore += 0.3;
+        // --- Risk scoring: real HemoAlert model when available, mock formula otherwise ---
+        const prediction = await getMlPrediction(patient);
 
-        riskScore = Math.min(0.99, riskScore);
-        patient.riskScore = riskScore;
-        patient.riskLevel = riskScore >= 0.75 ? 'critical' : riskScore >= 0.5 ? 'high' : riskScore >= 0.2 ? 'medium' : 'low';
+        if (prediction) {
+          patient.riskScore = prediction.riskScore;
+          patient.riskLevel = prediction.riskLevel;
+          patient.riskShap = prediction.shapValues;
+        } else {
+          const riskScore = mockRiskScore(map, newHR, newSpO2);
+          patient.riskScore = riskScore;
+          patient.riskLevel = riskLevelFromScore(riskScore);
+        }
 
         await patient.save();
 

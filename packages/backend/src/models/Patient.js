@@ -5,15 +5,32 @@ const vitalSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  heartRate: Number,               
-  bloodPressureSystolic: Number,   
-  bloodPressureDiastolic: Number,  
-  temperature: Number,             
-  respiratoryRate: Number,         
+  heartRate: Number,
+  bloodPressureSystolic: Number,
+  bloodPressureDiastolic: Number,
+  temperature: Number,
+  respiratoryRate: Number,
   oxygenSaturation: Number,        // SpO2 percentage (normal: 95-100)
   lactate: Number,                 // mmol/L (elevated in sepsis)
-  gcs: Number                      // Glasgow Coma Scale 3-15 (15 = fully alert)
+  gcs: Number,                     // Glasgow Coma Scale 3-15 (15 = fully alert)
+  creatinine: Number,              // mg/dL (renal function)
+  bicarbonate: Number,             // mEq/L (metabolic acidosis marker)
+  bun: Number,                     // mg/dL (blood urea nitrogen)
+  vasopressorOn: {                 // is a vasopressor infusing at this reading
+    type: Boolean,
+    default: false
+  },
+  vasopressorAgent: {              // norepinephrine | epinephrine | vasopressin | phenylephrine | dopamine
+    type: String,
+    default: null
+  }
 });
+
+const shapFeatureSchema = new mongoose.Schema({
+  feature: { type: String, required: true },
+  value: mongoose.Schema.Types.Mixed,
+  impact: { type: Number, required: true }
+}, { _id: false });
 
 const noteSchema = new mongoose.Schema({
   text: { type: String, required: true, trim: true },
@@ -73,6 +90,9 @@ const patientSchema = new mongoose.Schema(
       enum: ['low', 'medium', 'high', 'critical'],
       default: 'low'
     },
+    // Populated from the ml-service prediction response; falls back to a
+    // client-side heuristic in the frontend when the model hasn't run yet.
+    riskShap: [shapFeatureSchema],
 
     isActive: {
       type: Boolean,

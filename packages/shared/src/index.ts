@@ -32,6 +32,10 @@ export interface VitalReading {
   lactate?: number;
   gcs?: number;
   creatinine?: number;
+  bicarbonate?: number;
+  bun?: number;
+  vasopressorOn?: boolean;
+  vasopressorAgent?: 'norepinephrine' | 'epinephrine' | 'vasopressin' | 'phenylephrine' | 'dopamine' | null;
 }
 
 export interface Patient {
@@ -48,6 +52,7 @@ export interface Patient {
   notes?: PatientNote[];
   riskScore: number;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  riskShap?: SHAPFeature[];
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;

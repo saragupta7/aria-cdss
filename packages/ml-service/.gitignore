@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Trained model artifacts are produced by the Colab/Kaggle pipeline
+# (see PIPELINE.md) and dropped in locally — not committed.
+model/*.pkl
+model/*.json
+model/*.csv
+!model/.gitkeep
