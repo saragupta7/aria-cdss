@@ -144,6 +144,68 @@ router.get('/me', protect, async (req, res) => {
   });
 });
 
+//PATCH /api/auth/me
+// Update the logged-in user's own profile (name / email)
+router.patch('/me', protect, async (req, res) => {
+  try {
+    const { name, email } = req.body;
+    if (email && email !== req.user.email) {
+      const existing = await User.findOne({ email: email.toLowerCase() });
+      if (existing && existing._id.toString() !== req.user._id.toString()) {
+        return res.status(400).json({ message: 'An account with this email already exists' });
+      }
+      req.user.email = email;
+    }
+    if (name) req.user.name = name;
+    await req.user.save();
+    res.json({
+      message: 'Profile updated',
+      user: {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        role: req.user.role
+      }
+    });
+  } catch (error) {
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ message: messages.join(', ') });
+    }
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
+});
+
+//PATCH /api/auth/me/password
+// Change the logged-in user's password
+router.patch('/me/password', protect, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Please provide current and new password' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
+    const user = await User.findById(req.user._id).select('+password');
+    const isMatch = await user.matchPassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+    user.password = newPassword;
+    await user.save();
+    await AuditLog.create({
+      user: user._id,
+      action: 'CHANGE_PASSWORD',
+      resource: 'Auth',
+      details: { email: user.email }
+    });
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
+});
+
 //GET /api/auth/users
 // Get all users (admin only)
 router.get('/users', protect, async (req, res) => {

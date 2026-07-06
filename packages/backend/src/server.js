@@ -10,7 +10,13 @@ connectDB().then(() => seedUser());
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
@@ -76,14 +82,18 @@ app.listen(PORT, () => {
 });
 
 const seedUser = async () => {
-  const User = require('./models/User'); 
-  const count = await User.countDocuments();
-  if (count === 0) {
-    await User.create({ 
-      name: 'Test Doctor', // <--- Add this line!
-      email: 'test@aria.com', 
-      password: 'CHANGEME' 
-    });
-    console.log("Test user created: test@aria.com / CHANGEME");
+  const User = require('./models/User');
+  // Ensure known accounts exist so every role is reachable out of the box.
+  // Non-destructive: only creates accounts that are missing.
+  const defaults = [
+    { name: 'Admin User', email: 'admin@aria.com', password: 'CHANGEME', role: 'admin' },
+    { name: 'Test Doctor', email: 'test@aria.com', password: 'CHANGEME', role: 'junior' }
+  ];
+  for (const acct of defaults) {
+    const exists = await User.findOne({ email: acct.email });
+    if (!exists) {
+      await User.create(acct);
+      console.log(`Seed user created: ${acct.email} / ${acct.password} (${acct.role})`);
+    }
   }
 };

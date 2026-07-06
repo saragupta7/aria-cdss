@@ -48,7 +48,9 @@ function RootLayout() {
             <NavIcon to="/dashboard/staff" icon={UsersIcon} active={isActive('/dashboard/staff')} />
           )}
 
-          <NavIcon to="/dashboard/audit" icon={FileText} active={isActive('/dashboard/audit')} />
+          {user?.role === 'admin' && (
+            <NavIcon to="/dashboard/audit" icon={FileText} active={isActive('/dashboard/audit')} />
+          )}
         </nav>
 
         {/* Profile at bottom */}

@@ -26,5 +26,15 @@ export const authApi = {
   register: async (data: any) => {
     const res = await api.post('/auth/register', data)
     return res.data
+  },
+
+  updateProfile: async (data: { name?: string; email?: string }) => {
+    const res = await api.patch('/auth/me', data)
+    return res.data.user
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const res = await api.patch('/auth/me/password', { currentPassword, newPassword })
+    return res.data
   }
 }

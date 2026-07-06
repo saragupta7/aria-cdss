@@ -3,7 +3,7 @@ import { authApi } from '../../api/auth';
 import { useNavigate, useLocation } from 'react-router';
 
 interface User {
-  _id: string;
+  id: string;
   name: string;
   email: string;
   role: 'admin' | 'senior' | 'junior';
@@ -13,6 +13,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   logout: () => void;
+  updateUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -56,8 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const updateUser = (updated: User) => setUser(updated);
+
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={{ user, loading, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

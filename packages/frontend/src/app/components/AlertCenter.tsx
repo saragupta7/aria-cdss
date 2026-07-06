@@ -17,15 +17,16 @@ export function AlertCenter() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [wardFilter, setWardFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [query, setQuery] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const fetchAlerts = async () => {
     try {
       setLoading(true);
-      const data = await alertsApi.getAll();
-      // data might be { count, alerts } or just array based on backend. Our api/alerts.ts says it expects an array or the backend returns { count, alerts }.
-      // Checking the backend route: `res.json({ count: alerts.length, alerts });`.
-      // So we should handle that in the API client or here.
-      setAlerts((data as any).alerts || data || []);
+      const data = await alertsApi.getAudit(); // full history (all statuses)
+      setAlerts(data || []);
     } catch (err) {
       setError("Failed to fetch alerts");
     } finally {
@@ -38,29 +39,74 @@ export function AlertCenter() {
   }, []);
 
   const handleResolve = async (id: string) => {
+    setBusyId(id);
     try {
       await alertsApi.resolve(id);
-      fetchAlerts();
+      await fetchAlerts();
     } catch (err) {
       console.error(err);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleAcknowledge = async (id: string) => {
+    setBusyId(id);
+    try {
+      await alertsApi.acknowledge(id);
+      await fetchAlerts();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusyId(null);
     }
   };
 
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
 
-  const activeAlerts = alerts.filter(a => a.status === 'active').length;
-  const avgResponseTime = '4.2';
-  const resolvedToday = alerts.filter(a => a.status === 'resolved').length;
+  const wardOf = (a: Alert) => (a.patient?.icuBed ? a.patient.icuBed.charAt(0).toUpperCase() : "");
 
-  const chartData = [
-    { hour: '00:00', alerts: 2 },
-    { hour: '04:00', alerts: 1 },
-    { hour: '08:00', alerts: 4 },
-    { hour: '12:00', alerts: 3 },
-    { hour: '16:00', alerts: 5 },
-    { hour: '20:00', alerts: 2 },
-    { hour: '24:00', alerts: 4 },
-  ];
+  const activeAlerts = alerts.filter(a => a.status === 'active').length;
+
+  // Average acknowledgement time (minutes) from real timestamps
+  const ackMins = alerts
+    .filter(a => a.acknowledgedAt)
+    .map(a => (new Date(a.acknowledgedAt as string).getTime() - new Date(a.createdAt).getTime()) / 60000)
+    .filter(m => m >= 0);
+  const avgResponseTime = ackMins.length
+    ? (ackMins.reduce((s, x) => s + x, 0) / ackMins.length).toFixed(1)
+    : "—";
+
+  const isToday = (d?: string) => {
+    if (!d) return false;
+    const t = new Date(d);
+    const now = new Date();
+    return t.getDate() === now.getDate() && t.getMonth() === now.getMonth() && t.getFullYear() === now.getFullYear();
+  };
+  const resolvedToday = alerts.filter(a => a.status === 'resolved' && isToday(a.resolvedAt)).length;
+
+  // Alert volume over the last 24h in six 4-hour buckets, the last ending at now (from real data)
+  const now = new Date();
+  const chartData = Array.from({ length: 6 }, (_, i) => {
+    const end = new Date(now.getTime() - (5 - i) * 4 * 3600 * 1000);
+    const start = new Date(end.getTime() - 4 * 3600 * 1000);
+    const count = alerts.filter(a => {
+      const t = new Date(a.createdAt).getTime();
+      return t >= start.getTime() && t < end.getTime();
+    }).length;
+    return { hour: `${end.getHours().toString().padStart(2, '0')}:00`, alerts: count };
+  });
+
+  const filteredAlerts = alerts.filter(a => {
+    if (statusFilter !== 'all' && a.status !== statusFilter) return false;
+    if (wardFilter !== 'all' && wardOf(a) !== wardFilter) return false;
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      const hay = `${a.patient?.name || ''} ${a.patient?.patientId || ''} ${a.type || ''} ${a.message || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="bg-slate-50/50 min-h-screen p-8">
@@ -81,6 +127,8 @@ export function AlertCenter() {
             <Search className="w-4 h-4 text-slate-400 mr-3" />
             <input
               type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search alert history..."
               className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
             />
@@ -96,9 +144,9 @@ export function AlertCenter() {
             colorClass="text-[#e85d22]" 
             bgClass="bg-[#e85d22]/10" 
           />
-          <CompactStatCard 
-            title="Avg Response" 
-            value={`${avgResponseTime}m`} 
+          <CompactStatCard
+            title="Avg Response"
+            value={avgResponseTime === "—" ? "—" : `${avgResponseTime}m`}
             icon={Clock} 
             colorClass="text-[#f59e0b]" 
             bgClass="bg-[#f59e0b]/10" 
@@ -159,15 +207,25 @@ export function AlertCenter() {
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
             <h2 className="text-base font-bold text-slate-900">Active & Recent Alerts</h2>
             <div className="flex gap-2">
-              <select className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100">
-                <option>All Wards</option>
-                <option>Ward A</option>
-                <option>Ward B</option>
+              <select
+                value={wardFilter}
+                onChange={(e) => setWardFilter(e.target.value)}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">All Wards</option>
+                <option value="A">Ward A</option>
+                <option value="B">Ward B</option>
+                <option value="C">Ward C</option>
               </select>
-              <select className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100">
-                <option>Status: All</option>
-                <option>Active</option>
-                <option>Acknowledged</option>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">Status: All</option>
+                <option value="active">Active</option>
+                <option value="acknowledged">Acknowledged</option>
+                <option value="resolved">Resolved</option>
               </select>
             </div>
           </div>
@@ -184,7 +242,14 @@ export function AlertCenter() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {alerts.map((alert) => (
+                {filteredAlerts.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-medium">
+                      No alerts match the current filters.
+                    </td>
+                  </tr>
+                )}
+                {filteredAlerts.map((alert) => (
                   <tr key={alert._id} className="hover:bg-slate-50 transition-colors group">
                     <td className="px-6 py-4 text-slate-500 text-sm font-medium">{new Date(alert.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</td>
                     <td className="px-6 py-4">
@@ -221,7 +286,20 @@ export function AlertCenter() {
                           View
                         </Link>
                         {alert.status === 'active' && (
-                          <button onClick={() => handleResolve(alert._id)} className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm">
+                          <button
+                            onClick={() => handleAcknowledge(alert._id)}
+                            disabled={busyId === alert._id}
+                            className="px-3 py-1.5 bg-[#3b82f6] text-white rounded-lg text-xs font-bold hover:bg-[#2563eb] transition-all shadow-sm disabled:opacity-50"
+                          >
+                            Acknowledge
+                          </button>
+                        )}
+                        {alert.status !== 'resolved' && (
+                          <button
+                            onClick={() => handleResolve(alert._id)}
+                            disabled={busyId === alert._id}
+                            className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm disabled:opacity-50"
+                          >
                             Resolve
                           </button>
                         )}
