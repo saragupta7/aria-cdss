@@ -79,6 +79,17 @@ input[type="range"].aria-slider::-moz-range-thumb {
   background: #fff; border: 3px solid #0e1f38; cursor: grab;
 }
 
+/* ---------- Continuous ticker scroll (live events strip) ---------- */
+@keyframes aria-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.aria-marquee-track {
+  animation: aria-marquee 32s linear infinite;
+  will-change: transform;
+}
+.aria-marquee-track:hover { animation-play-state: paused; }
+
 /* ---------- Subtle grid backdrop (graph paper of a monitor) ---------- */
 .aria-grid-bg {
   background-image:
@@ -89,7 +100,7 @@ input[type="range"].aria-slider::-moz-range-thumb {
 
 /* ---------- Accessibility ---------- */
 @media (prefers-reduced-motion: reduce) {
-  .aria-wave, .aria-blink, .aria-ring, .aria-alarm-in { animation: none !important; }
+  .aria-wave, .aria-blink, .aria-ring, .aria-alarm-in, .aria-marquee-track { animation: none !important; }
   .aria-reveal { opacity: 1; transform: none; transition: none; }
   * { scroll-behavior: auto !important; }
 }

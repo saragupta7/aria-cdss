@@ -338,6 +338,34 @@ function LiveMonitor() {
   );
 }
 
+/* ---------- continuous live-events ticker ---------- */
+
+const TICKER_ITEMS = [
+  "WARD A · 3 BEDS CRITICAL",
+  "MODEL INFERENCE · 118ms AVG",
+  "WARD B · ALL STABLE",
+  "ALERT DISPATCHED · BED 07 → ON-CALL · 0.4s",
+  "WARD C · 1 BED ELEVATED RISK",
+  "AUDIT LOG · 1,204 EVENTS TODAY",
+  "SYSTEM UPTIME · 99.98%",
+];
+
+function LiveTicker() {
+  const items = [...TICKER_ITEMS, ...TICKER_ITEMS];
+  return (
+    <div className="border-y overflow-hidden" style={{ borderColor: LINE, background: "#0a1729" }}>
+      <div className="flex items-center py-3 aria-marquee-track" style={{ width: "max-content" }}>
+        {items.map((item, i) => (
+          <div key={i} className="flex items-center gap-2 px-6 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full aria-blink shrink-0" style={{ background: TRACE }} />
+            <span className="font-tele text-[11px] tracking-widest text-slate-400">{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- page sections ---------- */
 
 function StatsStrip() {
@@ -554,6 +582,9 @@ export function Landing() {
           <LiveMonitor />
         </div>
       </section>
+
+      {/* ---------- live ticker ---------- */}
+      <LiveTicker />
 
       {/* ---------- stats ---------- */}
       <StatsStrip />
