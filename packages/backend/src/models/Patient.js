@@ -12,7 +12,6 @@ const vitalSchema = new mongoose.Schema({
   respiratoryRate: Number,
   oxygenSaturation: Number,        // SpO2 percentage (normal: 95-100)
   lactate: Number,                 // mmol/L (elevated in sepsis)
-  gcs: Number,                     // Glasgow Coma Scale 3-15 (15 = fully alert)
   creatinine: Number,              // mg/dL (renal function)
   bicarbonate: Number,             // mEq/L (metabolic acidosis marker)
   bun: Number,                     // mg/dL (blood urea nitrogen)
@@ -97,6 +96,26 @@ const patientSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+
+    // 'simulated' patients get live vitals from vitalsEngine.js's tick loop.
+    // 'mimic' patients are real de-identified MIMIC-IV cases imported by
+    // seedMimicPatients.js — vitalsEngine.js excludes them so their real
+    // history isn't overwritten by synthetic drift.
+    dataSource: {
+      type: String,
+      enum: ['simulated', 'mimic'],
+      default: 'simulated'
+    },
+
+    // Full real trajectory for 'mimic' patients (see seedMimicPatients.js).
+    // vitalsEngine.js reveals one reading per tick from here into `vitals`,
+    // rather than synthesizing new ones, and wraps back to the start once
+    // exhausted. Unused for 'simulated' patients.
+    mimicHistory: [vitalSchema],
+    mimicCursor: {
+      type: Number,
+      default: 0
     }
   },
   {

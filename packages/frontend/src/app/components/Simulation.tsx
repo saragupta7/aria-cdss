@@ -1,10 +1,18 @@
-import { useState } from "react";
-import { FlaskConical, RefreshCcw, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { FlaskConical, RefreshCcw, Check, BrainCircuit, Calculator } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import api from "../../api/client";
 
 interface SavedScenario {
   id: number;
   mapNow: number; hr: number; spo2: number; lactate: number; riskScore: number; riskLevel: string;
+}
+
+interface ModelPrediction {
+  source: 'model' | 'heuristic';
+  riskScore?: number;   // 0-1 calibrated probability when source === 'model'
+  riskLevel?: string;
+  shapValues?: { feature: string; value: string; impact: number }[];
 }
 
 export function Simulation() {
@@ -27,7 +35,9 @@ export function Simulation() {
   const pulsePressure = sbp - dbp;
   const hrMapProduct = hr * mapNow;
 
-  // Mock AI Logic to drive the visuals
+  // Heuristic fallback — used when the HemoAlert ml-service is unreachable
+  // or has no trained model loaded. Otherwise the real model's calibrated
+  // probability (fetched below) drives the visuals instead.
   const calculateRisk = () => {
     let score = 5;
     if (mapNow < 65) score += 35;
@@ -40,8 +50,31 @@ export function Simulation() {
     return Math.min(score, 99);
   };
 
-  const riskScore = calculateRisk();
-  const riskLevel = riskScore >= 75 ? 'CRITICAL' : riskScore >= 50 ? 'MODERATE' : 'STABLE';
+  // Ask the backend to score this scenario with the real model, debounced so
+  // slider drags don't fire a request per pixel.
+  const [prediction, setPrediction] = useState<ModelPrediction>({ source: 'heuristic' });
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.post('/patients/sandbox/predict', {
+          mapNow, map1h, map3h, hr, spo2, rr, lactate, creatinine, sbp, dbp, vasopressor
+        });
+        setPrediction(res.data);
+      } catch {
+        setPrediction({ source: 'heuristic' });
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [mapNow, map1h, map3h, hr, spo2, rr, lactate, creatinine, sbp, dbp, vasopressor]);
+
+  const isModelScore = prediction.source === 'model' && prediction.riskScore != null;
+  const riskScore = isModelScore
+    ? Math.round(prediction.riskScore! * 100)
+    : calculateRisk();
+  const riskLevel = isModelScore
+    ? (prediction.riskLevel === 'critical' || prediction.riskLevel === 'high' ? 'CRITICAL'
+      : prediction.riskLevel === 'medium' ? 'MODERATE' : 'STABLE')
+    : riskScore >= 75 ? 'CRITICAL' : riskScore >= 50 ? 'MODERATE' : 'STABLE';
   const riskColor = riskScore >= 75 ? '#e85d22' : riskScore >= 50 ? '#f59e0b' : '#3b82f6';
   
   const pieData = [
@@ -134,6 +167,15 @@ export function Simulation() {
             
             {/* Main AI Donut & Status */}
             <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-200 flex flex-col items-center relative">
+              {/* Score source badge — same semantics as the PatientDetail SHAP tab */}
+              <div className={`absolute top-5 right-5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                isModelScore
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-slate-50 text-slate-500 border-slate-200'
+              }`}>
+                {isModelScore ? <BrainCircuit className="w-3 h-3" /> : <Calculator className="w-3 h-3" />}
+                {isModelScore ? 'HemoAlert model' : 'Heuristic estimate'}
+              </div>
               <div className="w-56 h-56 relative mb-6">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>

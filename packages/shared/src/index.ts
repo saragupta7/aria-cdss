@@ -30,7 +30,6 @@ export interface VitalReading {
   respiratoryRate?: number;
   oxygenSaturation?: number;
   lactate?: number;
-  gcs?: number;
   creatinine?: number;
   bicarbonate?: number;
   bun?: number;

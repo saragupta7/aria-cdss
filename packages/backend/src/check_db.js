@@ -1,6 +1,8 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 
+require('./dns-fix');
+
 async function check() {
   await mongoose.connect(process.env.MONGO_URI);
   const Patient = require('./models/Patient');

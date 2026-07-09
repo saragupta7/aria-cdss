@@ -147,7 +147,7 @@ SELECT
     p.anchor_age,
     p.gender
 FROM `physionet-data.mimiciv_3_1_icu.icustays` ie
-INNER JOIN `physionet-data.mimiciv_hosp.patients` p
+INNER JOIN `physionet-data.mimiciv_3_1_hosp.patients` p
     ON ie.subject_id = p.subject_id
 WHERE
     TIMESTAMP_DIFF(ie.outtime, ie.intime, HOUR) >= 12
@@ -1152,6 +1152,316 @@ service temporarily drops out.
 setup hosts the Node backend and Mongo, add this as a third service and mount
 or bake in the `model/` directory; point the backend's `ML_SERVICE_URL` at
 its internal address.
+
+---
+
+## Phase 8 — Import 50 real MIMIC-IV patients (replayed live, no training)
+
+Separate from Phases 1–7 (training and serving), this phase pulls 50 real
+de-identified ICU stays and loads them into the app as **replay** patients:
+each one's full real trajectory is stored in `Patient.mimicHistory`, and
+`vitalsEngine.js` reveals one real reading per 60-second tick into `vitals`
+(tracked by `Patient.mimicCursor`), scoring risk against only what has been
+"seen" so far. When a stay's history is exhausted, the replay loops back to
+its first reading. No synthetic drift is ever applied to these patients —
+every value shown is what MIMIC-IV actually recorded. Patients admitted
+through the app UI (`dataSource: 'simulated'`) still get the original
+synthetic random-walk vitals instead.
+
+Create `hemoalert_08_demo_patients.ipynb`. Reuses the same GCP project/auth
+as Phase 1 — doesn't depend on having run Phases 1–5 in this session.
+
+### 8.1 — Sample 50 stays: mix of stable and unstable cases
+
+Half the sample is drawn from stays that never received a vasopressor
+(mostly stable), half from stays that did (more clinically interesting —
+gives the demo a spread of risk levels instead of 50 uneventful stays).
+
+```python
+from google.colab import auth, drive
+from google.cloud import bigquery
+import pandas as pd
+
+auth.authenticate_user()
+drive.mount('/content/drive')
+base = '/content/drive/MyDrive/hemoalert'
+PROJECT_ID = 'hemoalert'
+client = bigquery.Client(project=PROJECT_ID)
+
+sample_query = """
+WITH eligible AS (
+  SELECT
+    ie.subject_id, ie.hadm_id, ie.stay_id, ie.intime, ie.outtime,
+    ie.first_careunit,
+    TIMESTAMP_DIFF(ie.outtime, ie.intime, HOUR) AS los_hours,
+    p.anchor_age, p.gender,
+    EXISTS (
+      SELECT 1 FROM `physionet-data.mimiciv_3_1_icu.inputevents` v
+      WHERE v.stay_id = ie.stay_id
+        AND v.itemid IN (221906, 221289, 222315, 221749, 221662)
+        AND v.amount > 0
+    ) AS had_vasopressor
+  FROM `physionet-data.mimiciv_3_1_icu.icustays` ie
+  INNER JOIN `physionet-data.mimiciv_3_1_hosp.patients` p
+    ON ie.subject_id = p.subject_id
+  WHERE TIMESTAMP_DIFF(ie.outtime, ie.intime, HOUR) BETWEEN 12 AND 240
+    AND p.anchor_age >= 18
+),
+unstable AS (
+  -- BigQuery's RAND() takes no seed argument; FARM_FINGERPRINT on stay_id
+  -- gives a deterministic (reproducible across reruns) pseudo-random order.
+  SELECT * FROM eligible WHERE had_vasopressor
+  ORDER BY FARM_FINGERPRINT(CONCAT(CAST(stay_id AS STRING), '-seed42')) LIMIT 25
+),
+stable AS (
+  SELECT * FROM eligible WHERE NOT had_vasopressor
+  ORDER BY FARM_FINGERPRINT(CONCAT(CAST(stay_id AS STRING), '-seed42')) LIMIT 25
+)
+SELECT * FROM unstable UNION ALL SELECT * FROM stable
+"""
+
+demo_cohort = client.query(sample_query).to_dataframe()
+print(f"Sampled {len(demo_cohort)} stays "
+      f"({demo_cohort['had_vasopressor'].sum()} with vasopressor)")
+demo_cohort.to_csv(f'{base}/data/raw/demo_cohort.csv', index=False)
+```
+
+### 8.2 — Pull vitals, labs, vasopressors, primary diagnosis for these 50 stays
+
+Same itemids as Phase 2.3–2.5, scoped to just these 50 `stay_id`s, plus a
+new diagnosis lookup that Phase 2 didn't need.
+
+```python
+stay_ids = demo_cohort['stay_id'].astype(int).tolist()
+hadm_ids = demo_cohort['hadm_id'].astype(int).tolist()
+
+vitals_query = """
+SELECT c.stay_id, c.charttime, c.itemid, c.valuenum,
+  CASE c.itemid
+    WHEN 220052 THEN 'map' WHEN 220179 THEN 'sbp' WHEN 220180 THEN 'dbp'
+    WHEN 220045 THEN 'heart_rate' WHEN 220210 THEN 'resp_rate'
+    WHEN 220277 THEN 'spo2' WHEN 223761 THEN 'temp_f'
+  END AS vital_name
+FROM `physionet-data.mimiciv_3_1_icu.chartevents` c
+WHERE c.stay_id IN UNNEST(@stay_ids)
+  AND c.itemid IN (220052, 220179, 220180, 220045, 220210, 220277, 223761)
+  AND c.valuenum IS NOT NULL AND c.valuenum > 0
+"""
+job_config = bigquery.QueryJobConfig(
+    query_parameters=[bigquery.ArrayQueryParameter("stay_ids", "INT64", stay_ids)])
+vitals_raw = client.query(vitals_query, job_config=job_config).to_dataframe()
+
+labs_query = """
+SELECT l.hadm_id, l.charttime, l.itemid, l.valuenum,
+  CASE l.itemid
+    WHEN 50813 THEN 'lactate' WHEN 50912 THEN 'creatinine'
+    WHEN 50882 THEN 'bicarbonate' WHEN 51006 THEN 'bun'
+  END AS lab_name
+FROM `physionet-data.mimiciv_3_1_hosp.labevents` l
+WHERE l.hadm_id IN UNNEST(@hadm_ids)
+  AND l.itemid IN (50813, 50912, 50882, 51006)
+  AND l.valuenum IS NOT NULL AND l.valuenum > 0
+"""
+job_config = bigquery.QueryJobConfig(
+    query_parameters=[bigquery.ArrayQueryParameter("hadm_ids", "INT64", hadm_ids)])
+labs_raw = client.query(labs_query, job_config=job_config).to_dataframe()
+
+vaso_query = """
+SELECT ie.stay_id, ie.starttime, ie.endtime, ie.itemid,
+  CASE ie.itemid
+    WHEN 221906 THEN 'norepinephrine' WHEN 221289 THEN 'epinephrine'
+    WHEN 222315 THEN 'vasopressin' WHEN 221749 THEN 'phenylephrine'
+    WHEN 221662 THEN 'dopamine'
+  END AS vasopressor
+FROM `physionet-data.mimiciv_3_1_icu.inputevents` ie
+WHERE ie.stay_id IN UNNEST(@stay_ids)
+  AND ie.itemid IN (221906, 221289, 222315, 221749, 221662)
+  AND ie.amount > 0
+ORDER BY ie.stay_id, ie.starttime
+"""
+job_config = bigquery.QueryJobConfig(
+    query_parameters=[bigquery.ArrayQueryParameter("stay_ids", "INT64", stay_ids)])
+vaso_raw = client.query(vaso_query, job_config=job_config).to_dataframe()
+
+diagnosis_query = """
+SELECT d.hadm_id, i.long_title AS diagnosis
+FROM `physionet-data.mimiciv_3_1_hosp.diagnoses_icd` d
+JOIN `physionet-data.mimiciv_3_1_hosp.d_icd_diagnoses` i
+  ON d.icd_code = i.icd_code AND d.icd_version = i.icd_version
+WHERE d.hadm_id IN UNNEST(@hadm_ids) AND d.seq_num = 1
+"""
+job_config = bigquery.QueryJobConfig(
+    query_parameters=[bigquery.ArrayQueryParameter("hadm_ids", "INT64", hadm_ids)])
+diagnosis_raw = client.query(diagnosis_query, job_config=job_config).to_dataframe()
+
+for name, df in [('vitals', vitals_raw), ('labs', labs_raw),
+                  ('vasopressors', vaso_raw), ('diagnoses', diagnosis_raw)]:
+    df.to_csv(f'{base}/data/raw/demo_{name}.csv', index=False)
+    print(f"{name}: {len(df)} rows")
+```
+
+### 8.3 — Resample each stay to hourly readings, shaped for the app's `Patient` schema
+
+This mirrors Phase 3.5's resampling, but writes directly into the exact
+field names/units `packages/backend/src/models/Patient.js`'s `vitalSchema`
+expects — camelCase, temperature in Celsius (MIMIC's `223761` is
+Fahrenheit), `vasopressorOn`/`vasopressorAgent` instead of the training
+pipeline's single `vasopressor_on` flag.
+
+```python
+import re
+import numpy as np
+
+# Round to the nearest hour *before* pivoting/merging. A per-stay timeline
+# built from `intime` is essentially never exactly on the hour (e.g.
+# 03:47:00), while real chartevents timestamps cluster near round hours —
+# an exact-timestamp merge against that offset grid mostly misses, which
+# is why the first pass built 1 patient instead of ~50. Phase 3.5's
+# cohort-wide resample gets away with the same exact-merge pattern because
+# across thousands of stays there's enough incidental alignment for
+# training; a single-stay resample doesn't have that luxury.
+vitals_raw['charttime'] = pd.to_datetime(vitals_raw['charttime']).dt.round('h')
+labs_raw['charttime']   = pd.to_datetime(labs_raw['charttime']).dt.round('h')
+
+vitals_wide = vitals_raw.pivot_table(
+    index=['stay_id', 'charttime'], columns='vital_name', values='valuenum', aggfunc='mean'
+).reset_index()
+vitals_wide.columns.name = None
+
+hadm_to_stay = demo_cohort[['hadm_id', 'stay_id']].drop_duplicates()
+# Merge into a new frame rather than reassigning labs_raw — labs_raw already
+# has no stay_id column the first time this cell runs, but if you rerun the
+# cell (e.g. after fixing something below) without rerunning 8.2 first,
+# reassigning labs_raw here would merge an already-merged frame against
+# itself, and pandas would suffix the colliding stay_id column into
+# stay_id_x/stay_id_y instead of leaving a plain stay_id behind.
+labs_with_stay = labs_raw.merge(hadm_to_stay, on='hadm_id', how='inner')
+labs_wide = labs_with_stay.pivot_table(
+    index=['stay_id', 'charttime'], columns='lab_name', values='valuenum', aggfunc='mean'
+).reset_index()
+labs_wide.columns.name = None
+
+vaso_raw['starttime']    = pd.to_datetime(vaso_raw['starttime'])
+vaso_raw['endtime']      = pd.to_datetime(vaso_raw['endtime'])
+vitals_wide['charttime'] = pd.to_datetime(vitals_wide['charttime'])
+labs_wide['charttime']   = pd.to_datetime(labs_wide['charttime'])
+
+vitals_dict = {k: g.drop(columns='stay_id') for k, g in vitals_wide.groupby('stay_id')}
+labs_dict   = {k: g.drop(columns='stay_id') for k, g in labs_wide.groupby('stay_id')}
+vaso_dict   = {k: g for k, g in vaso_raw.groupby('stay_id')}
+diag_map    = diagnosis_raw.set_index('hadm_id')['diagnosis'].to_dict()
+
+def ward_code(careunit):
+    # MIMIC's first_careunit is e.g. "Medical Intensive Care Unit (MICU)" —
+    # the parenthesized abbreviation is already a clean ward code.
+    m = re.search(r'\(([^)]+)\)', careunit or '')
+    return m.group(1) if m else 'ICU'
+
+def vasopressor_at(stay_vaso, t):
+    if stay_vaso is None:
+        return False, None
+    hit = stay_vaso[(stay_vaso['starttime'] <= t) &
+                     ((stay_vaso['endtime'].isna()) | (stay_vaso['endtime'] >= t))]
+    if len(hit) == 0:
+        return False, None
+    return True, hit.iloc[0]['vasopressor']
+
+def build_patient(row, bed_counters):
+    stay_id, hadm_id, subject_id = int(row.stay_id), int(row.hadm_id), int(row.subject_id)
+    intime, outtime = row.intime, row.outtime
+    ward = ward_code(row.first_careunit)
+    bed_counters[ward] = bed_counters.get(ward, 0) + 1
+
+    # Cap at 72h of hourly readings — MIMIC stays can run past a week, and
+    # the app's vitals views/charts aren't built for that much history.
+    # Start from intime rounded to the hour, matching how vitals/labs
+    # charttime was rounded above, so the merge below actually lines up.
+    grid_start = intime.round('h')
+    timeline = pd.date_range(start=grid_start, end=min(outtime, intime + pd.Timedelta(hours=72)), freq='1h')
+    sv = vitals_dict.get(stay_id)
+    sl = labs_dict.get(stay_id)
+    stay_vaso = vaso_dict.get(stay_id)
+
+    df = pd.DataFrame({'charttime': timeline})
+    if sv is not None: df = df.merge(sv, on='charttime', how='left')
+    if sl is not None: df = df.merge(sl, on='charttime', how='left')
+
+    for col in ['map', 'sbp', 'dbp', 'heart_rate', 'resp_rate', 'spo2', 'temp_f']:
+        if col in df.columns: df[col] = df[col].ffill(limit=2)
+    for col in ['lactate', 'creatinine', 'bicarbonate', 'bun']:
+        if col in df.columns: df[col] = df[col].ffill(limit=6)
+
+    vitals = []
+    for r in df.itertuples():
+        on, agent = vasopressor_at(stay_vaso, r.charttime)
+        get = lambda col: getattr(r, col) if hasattr(r, col) and pd.notna(getattr(r, col)) else None
+        temp_f = get('temp_f')
+        vitals.append({
+            'timestamp': r.charttime.isoformat(),
+            'heartRate': get('heart_rate'),
+            'bloodPressureSystolic': get('sbp'),
+            'bloodPressureDiastolic': get('dbp'),
+            'temperature': ((temp_f - 32) * 5 / 9) if temp_f is not None else None,
+            'respiratoryRate': get('resp_rate'),
+            'oxygenSaturation': get('spo2'),
+            'lactate': get('lactate'),
+            'creatinine': get('creatinine'),
+            'bicarbonate': get('bicarbonate'),
+            'bun': get('bun'),
+            'vasopressorOn': bool(on),
+            'vasopressorAgent': agent,
+        })
+    # Drop timesteps with no meaningful vitals coverage at all
+    vitals = [v for v in vitals if any(v[k] is not None for k in
+              ('heartRate', 'bloodPressureSystolic', 'oxygenSaturation'))]
+
+    return {
+        'patientId': f'MIMIC-{stay_id}',
+        'name': f'MIMIC Patient #{subject_id}',
+        'age': int(row.anchor_age),
+        'gender': 'Male' if row.gender == 'M' else 'Female',
+        'icuBed': f'{ward}-{bed_counters[ward]}',
+        'ward': ward,
+        'admissionDate': intime.isoformat(),
+        'diagnosis': diag_map.get(hadm_id, 'Unspecified'),
+        'vitals': vitals,
+    }
+
+bed_counters = {}
+patients = [build_patient(row, bed_counters) for row in demo_cohort.itertuples()]
+patients = [p for p in patients if len(p['vitals']) >= 6]  # need enough history to be useful
+
+print(f"Built {len(patients)} patient records "
+      f"(median {int(pd.Series([len(p['vitals']) for p in patients]).median())} hourly readings each)")
+```
+
+### 8.4 — Export and drop into the repo
+
+```python
+import json
+with open(f'{base}/outputs/demo_patients.json', 'w') as f:
+    json.dump(patients, f, indent=2, default=str)
+print(f"Wrote {base}/outputs/demo_patients.json — {len(patients)} patients")
+```
+
+Download `demo_patients.json` from Drive and save it as
+`packages/backend/src/data/mimicPatients.json` in the repo. Then, with
+`packages/ml-service` running (so real risk scores/SHAP get computed
+instead of the mock fallback) and `MONGO_URI` set:
+
+```bash
+cd packages/backend
+node src/seedMimicPatients.js
+```
+
+This reseeds the 50 patients with `dataSource: 'mimic'`: the full imported
+trajectory goes into `mimicHistory`, `vitals` starts with just the first
+reading, and each patient gets an initial HemoAlert risk score/SHAP via
+`POST /predict`. From there `vitalsEngine.js` takes over, revealing one
+real reading per 60-second tick (looping back to the start when the stay's
+history runs out) and rescoring against the revealed history each tick.
+Patients admitted through the app UI (`dataSource: 'simulated'`) are never
+touched by this seed.
 
 ---
 

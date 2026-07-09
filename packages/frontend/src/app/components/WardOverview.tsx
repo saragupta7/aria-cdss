@@ -8,6 +8,18 @@ import { AdmitPatientModal } from "./AdmitPatientModal";
 
 const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
 
+// icuBed is "<ward><number>" for simulated patients (e.g. "A7") but
+// "<ward>-<number>" for MIMIC-sourced ones (e.g. "MICU-14") since ward
+// codes there are multi-letter. Strip the exact ward prefix rather than
+// just one leading letter, so both formats reduce to a plain bed number.
+function bedNumber(p: Patient): string {
+  if (!p.icuBed) return '1';
+  if (p.ward && p.icuBed.startsWith(p.ward)) {
+    return p.icuBed.slice(p.ward.length).replace(/^-/, '');
+  }
+  return p.icuBed.replace(/^[A-Z]+-?/i, '');
+}
+
 interface OverviewPatient extends Patient {
   displayRiskLevel: string;
   bed: string;
@@ -28,7 +40,7 @@ export function WardOverview() {
       const mapped: OverviewPatient[] = data.map((p: Patient) => {
         return {
           ...p,
-          bed: p.icuBed ? p.icuBed.replace(/^[A-Z]/i, '') : '1',
+          bed: bedNumber(p),
           displayRiskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
         };
       });
@@ -53,7 +65,7 @@ export function WardOverview() {
     return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-red-500">{error}</div>;
   }
 
-  const wards = ['A', 'B', 'C'];
+  const wards = Array.from(new Set(patients.map(p => p.ward).filter(Boolean))).sort();
 
   const getWardStats = (ward: string) => {
     const wardPatients = patients.filter(p => p.ward === ward);

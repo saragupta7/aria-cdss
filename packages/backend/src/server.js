@@ -66,19 +66,8 @@ app.listen(PORT, () => {
   
   // Start the vitals simulation engine
   startEngine();
-  console.log('\nAvailable endpoints:');
-  console.log('  POST /api/auth/register');
-  console.log('  POST /api/auth/login');
-  console.log('  GET  /api/auth/me');
-  console.log('  GET  /api/patients');
-  console.log('  GET  /api/patients/:id');
-  console.log('  POST /api/patients');
-  console.log('  POST /api/patients/:id/vitals');
-  console.log('  GET  /api/alerts');
-  console.log('  PATCH /api/alerts/:id/acknowledge');
-  console.log('  PATCH /api/alerts/:id/resolve');
-  console.log('  GET  /api/admin/stats (admin only)');
-  console.log('  GET  /api/working\n');
+  console.log('\nAvailable endpoints: see README.md ("Backend API") for the full table');
+  console.log('  Health check: GET /api/working\n');
 });
 
 const seedUser = async () => {

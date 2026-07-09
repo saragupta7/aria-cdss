@@ -77,9 +77,11 @@ export function Dashboard() {
     (p.displayRiskLevel || "").toLowerCase().includes(q);
 
   const visiblePatients = patients.filter(matchesSearch);
-  const wardA = visiblePatients.filter(p => p.ward === 'A');
-  const wardB = visiblePatients.filter(p => p.ward === 'B');
-  const wardC = visiblePatients.filter(p => p.ward === 'C');
+  const wardNames = Array.from(new Set(visiblePatients.map(p => p.ward).filter(Boolean))).sort();
+  const wardGroups = wardNames.map(ward => ({
+    ward,
+    patients: visiblePatients.filter(p => p.ward === ward),
+  }));
 
   const criticalCount = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
   const stableCount = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
@@ -309,9 +311,9 @@ export function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 gap-6">
-          <WardCard ward="A" patients={wardA} />
-          <WardCard ward="B" patients={wardB} />
-          <WardCard ward="C" patients={wardC} />
+          {wardGroups.map(({ ward, patients }) => (
+            <WardCard key={ward} ward={ward} patients={patients} />
+          ))}
         </div>
       </div>
     </div>

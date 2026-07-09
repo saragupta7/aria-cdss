@@ -84,7 +84,6 @@ class VitalsReading(BaseModel):
     respiratoryRate: Optional[float] = None
     oxygenSaturation: Optional[float] = None
     lactate: Optional[float] = None
-    gcs: Optional[float] = None
     creatinine: Optional[float] = None
     bicarbonate: Optional[float] = None
     bun: Optional[float] = None

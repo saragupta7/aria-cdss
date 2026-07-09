@@ -1,22 +1,77 @@
 const express = require('express');
 const router = express.Router();
 const Patient = require('../models/Patient');
-const Alert = require('../models/Alert');
 const { protect } = require('../middleware/auth');
 const { roleCheck } = require('../middleware/roleCheck');
 const { logAction } = require('../middleware/auditLog');
+const { getMlPrediction } = require('../services/vitalsEngine');
 
 router.use(protect);
+
+// POST /api/patients/sandbox/predict
+// Score a hypothetical patient built from the Training Sandbox sliders with
+// the real HemoAlert model. Returns { source: 'model', ... } on success, or
+// { source: 'heuristic' } when ml-service is down/unloaded so the frontend
+// knows to fall back to its local formula (and label the output accordingly).
+router.post('/sandbox/predict', async (req, res) => {
+  try {
+    const {
+      mapNow, map1h, map3h, hr, spo2, rr,
+      lactate, creatinine, sbp, dbp, vasopressor
+    } = req.body;
+
+    // The model consumes SBP/DBP (MAP is derived in features.py). The
+    // sandbox exposes MAP sliders for history, so back-derive plausible
+    // SBP/DBP pairs holding the current pulse pressure constant:
+    // MAP = DBP + PP/3  =>  DBP = MAP - PP/3.
+    const pp = Math.max(10, (sbp ?? 120) - (dbp ?? 80));
+    const bpFromMap = (map) => {
+      const d = map - pp / 3;
+      return { bloodPressureSystolic: d + pp, bloodPressureDiastolic: d };
+    };
+
+    const now = Date.now();
+    const HOUR = 3600 * 1000;
+    const base = {
+      heartRate: hr,
+      respiratoryRate: rr,
+      oxygenSaturation: spo2,
+      lactate,
+      creatinine,
+      vasopressorOn: !!vasopressor
+    };
+    // 4 hourly timesteps: 3h ago, 2h ago (interpolated), 1h ago, now —
+    // enough history for the slope/rolling features to be meaningful.
+    const vitalsHistory = [
+      { ...base, timestamp: new Date(now - 3 * HOUR).toISOString(), ...bpFromMap(map3h) },
+      { ...base, timestamp: new Date(now - 2 * HOUR).toISOString(), ...bpFromMap((map3h + map1h) / 2) },
+      { ...base, timestamp: new Date(now - 1 * HOUR).toISOString(), ...bpFromMap(map1h) },
+      { ...base, timestamp: new Date(now).toISOString(), bloodPressureSystolic: sbp, bloodPressureDiastolic: dbp }
+    ];
+
+    const prediction = await getMlPrediction({
+      admissionDate: new Date(now - 24 * HOUR),
+      vitals: vitalsHistory
+    });
+
+    if (!prediction) {
+      return res.json({ source: 'heuristic' });
+    }
+    res.json({ source: 'model', ...prediction });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 // GET /api/patients 
 // Sorted by risk (highest first)
 // Used by the Ward View in the frontend
-router.get('/', logAction('VIEW_ALL_PATIENTS', 'Patient'), async (req, res) => {
+router.get('/', async (req, res) => {
     try {
       const patients = await Patient
-        .find({ isActive: true })   
-        .select('-vitals')        
-        .sort({ riskScore: -1 }); 
+        .find({ isActive: true })
+        .select('-vitals -mimicHistory') // mimicHistory is the unrevealed future trajectory — server-side only
+        .sort({ riskScore: -1 });
       res.json({
         count: patients.length,
         patients
@@ -30,7 +85,7 @@ router.get('/', logAction('VIEW_ALL_PATIENTS', 'Patient'), async (req, res) => {
 // Get one patient with FULL vitals history
 // Used by the Patient Detail view in the frontend
 
-router.get('/:id', logAction('VIEW_PATIENT', 'Patient'), async (req, res) => {
+router.get('/:id', async (req, res) => {
     try {
       const mongoose = require('mongoose');
       let patient;
@@ -46,6 +101,8 @@ router.get('/:id', logAction('VIEW_PATIENT', 'Patient'), async (req, res) => {
       const patientData = patient.toObject();
       // last 24 hours vitals (consifering gap of 30 minutes between each reading )
       patientData.vitals = patientData.vitals.slice(-48);
+      // Unrevealed future readings for MIMIC replay patients — never sent to clients
+      delete patientData.mimicHistory;
       res.json({ patient: patientData });
     } catch (error) {
       res.status(500).json({ message: error.message });
@@ -107,7 +164,11 @@ router.post('/:id/vitals', async (req, res) => {
       respiratoryRate: req.body.respiratoryRate,
       oxygenSaturation: req.body.oxygenSaturation,
       lactate: req.body.lactate,
-      gcs: req.body.gcs
+      creatinine: req.body.creatinine,
+      bicarbonate: req.body.bicarbonate,
+      bun: req.body.bun,
+      vasopressorOn: req.body.vasopressorOn,
+      vasopressorAgent: req.body.vasopressorAgent
     };
     // Add new reading to the vitals array
     patient.vitals.push(newVital);
@@ -171,47 +232,7 @@ router.post('/:id/notes', logAction('ADD_NOTE', 'Patient'), async (req, res) => 
   }
 });
 
-// PATCH /api/patients/:id/risk
-// Update a patient's ML risk score
-// To be called by the Flask ML service
-// It also automatically creates an alert if the risk crosses a threshold
-
-router.patch('/:id/risk', async (req, res) => {
-  try {
-    const { riskScore } = req.body;
-    if (riskScore === undefined || riskScore < 0 || riskScore > 1) {
-      return res.status(400).json({ message: 'riskScore must be a number between 0 and 1' });
-    }
-    const patient = await Patient.findById(req.params.id);
-    if (!patient) {
-      return res.status(404).json({ message: 'Patient not found' });
-    }
-    const previousRiskLevel = patient.riskLevel;
-    patient.riskScore = riskScore;
-    patient.updateRiskLevel();  // sets riskLevel based on score
-    await patient.save();
-    // Auto-create an alert if patient became critical
-    if (patient.riskLevel === 'critical' && previousRiskLevel !== 'critical') {
-      await Alert.create({
-        patient: patient._id,
-        type: 'ml_prediction',
-        message: `CRITICAL: ${patient.name} (${patient.icuBed}) has risk score ${(riskScore * 100).toFixed(0)}%. Immediate attention required.`,
-        severity: 'critical'
-      });
-    }
-    res.json({
-      message: 'Risk score updated',
-      patientId: patient.patientId,
-      riskScore: patient.riskScore,
-      riskLevel: patient.riskLevel,
-      alertCreated: patient.riskLevel === 'critical' && previousRiskLevel !== 'critical'
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// DELETE /api/patients/:id 
+// DELETE /api/patients/:id
 // Only admins can discharge patients
 
 router.delete('/:id', roleCheck('admin'), logAction('DISCHARGE_PATIENT', 'Patient'), async (req, res) => {

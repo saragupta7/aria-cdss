@@ -1,2 +1,6 @@
 node_modules/
 .env
+
+# Derived from MIMIC-IV (see ml-service/PIPELINE.md Phase 8) — not
+# committed, same as ml-service's model/ artifacts.
+src/data/mimicPatients.json

@@ -6,6 +6,17 @@ import type { Patient } from "@aria/shared";
 
 const riskLevelMap: Record<string, string> = { low: 'STABLE', medium: 'MODERATE', high: 'CRITICAL', critical: 'CRITICAL' };
 
+// See WardOverview.tsx's bedNumber() — icuBed is "<ward><number>" for
+// simulated patients but "<ward>-<number>" for MIMIC ones (multi-letter
+// ward codes), so strip the exact ward prefix rather than one letter.
+function bedNumber(p: Patient): string {
+  if (!p.icuBed) return '1';
+  if (p.ward && p.icuBed.startsWith(p.ward)) {
+    return p.icuBed.slice(p.ward.length).replace(/^-/, '');
+  }
+  return p.icuBed.replace(/^[A-Z]+-?/i, '');
+}
+
 interface WardPatient extends Patient {
   displayRiskLevel: string;
   bed: string;
@@ -34,7 +45,7 @@ export function WardDetail() {
           
           return {
             ...p,
-            bed: p.icuBed ? p.icuBed.replace(/^[A-Z]/i, '') : '1',
+            bed: bedNumber(p),
             displayRiskLevel: riskLevelMap[p.riskLevel || 'low'] || 'STABLE',
             displayRiskScore: Math.round((p.riskScore || 0) * 100),
             icuDay: p.admissionDate
