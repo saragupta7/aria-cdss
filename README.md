@@ -75,7 +75,7 @@ pip install -r requirements.txt
 
 ```bash
 pnpm dev        # backend + frontend together
-pnpm dev:ml     # ml-service (separate terminal, venv active)
+pnpm dev:ml     # ml-service (separate terminal; uses packages/ml-service/.venv automatically)
 ```
 
 Or individually: `pnpm dev:be`, `pnpm dev:fe`.

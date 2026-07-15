@@ -320,18 +320,10 @@ export function Login() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-sm">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  disabled={isLoading}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-500 disabled:opacity-50"
-                />
-                <span className="ml-2 text-slate-600 font-medium">Remember me</span>
-              </label>
-              <a href="#forgot" className="text-blue-600 hover:text-blue-500 transition-colors font-semibold">
-                Forgot password?
-              </a>
+            <div className="flex items-center justify-end text-sm">
+              <Link to="/change-password" className="text-blue-600 hover:text-blue-500 transition-colors font-semibold">
+                Change password
+              </Link>
             </div>
 
             <button

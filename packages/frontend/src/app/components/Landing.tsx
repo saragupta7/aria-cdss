@@ -116,14 +116,13 @@ import {
   FileText,
   FlaskConical,
   Radio,
-  AlertTriangle,
 } from "lucide-react";
 
 /* ============================================================
    ARIA Landing — "the product is the hero"
-   A live, interactive bedside monitor: drag the slider to
-   deteriorate the simulated patient and watch ARIA predict
-   instability hours ahead and fire an alert.
+   A simulated bedside monitor with continuously moving
+   illustrative telemetry. Not connected to the model — and
+   labeled as such.
    Requires: src/styles/aria-theme.css imported globally.
    ============================================================ */
 
@@ -210,24 +209,22 @@ function LoopedWave({
   );
 }
 
-/* ---------- the interactive monitor ---------- */
+/* ---------- the simulated monitor ---------- */
 
 function LiveMonitor() {
-  const [severity, setSeverity] = useState(18);
   const [, setPulse] = useState(0);
 
-  // gentle live jitter so the numbers feel like real telemetry
+  // gentle jitter keeps the simulated telemetry moving
   useEffect(() => {
     const id = setInterval(() => setPulse((p) => p + 1), 1600);
     return () => clearInterval(id);
   }, []);
 
   const jitter = (n: number) => n + Math.round(Math.random() * 2 - 1);
-  const hr = jitter(Math.round(78 + severity * 0.55));
-  const map = jitter(Math.round(88 - severity * 0.28));
-  const spo2 = Math.min(100, jitter(Math.round(99 - severity * 0.07)));
-  const risk = Math.min(96, Math.round(6 + severity * 0.92));
-  const lead = (9 - severity * 0.05).toFixed(1);
+  const hr = jitter(88);
+  const map = jitter(83);
+  const spo2 = Math.min(100, jitter(98));
+  const risk = Math.max(0, jitter(22));
 
   const level = risk >= 70 ? "CRITICAL" : risk >= 45 ? "MODERATE" : "STABLE";
   const levelColor = level === "CRITICAL" ? ALERT : level === "MODERATE" ? AMBER : TRACE;
@@ -245,7 +242,7 @@ function LiveMonitor() {
       >
         <div className="flex items-center gap-2.5 font-tele text-[11px] tracking-widest text-slate-400">
           <span className="w-2 h-2 rounded-full aria-ring" style={{ background: TRACE }} />
-          BED 07 · WARD A · LIVE
+          BED 07 · WARD A · SIMULATED
         </div>
         <div className="font-tele text-[11px] tracking-widest" style={{ color: levelColor }}>
           {level}
@@ -290,64 +287,27 @@ function LiveMonitor() {
         ))}
       </div>
 
-      {/* prediction / alert strip */}
+      {/* disclosure strip */}
       <div className="px-5 py-4 border-t" style={{ borderColor: LINE }}>
-        {risk >= 70 ? (
-          <div
-            key="alert"
-            className="aria-alarm-in flex items-center gap-3 rounded-xl px-4 py-3 border"
-            style={{ background: "rgba(232,93,34,0.12)", borderColor: "rgba(232,93,34,0.4)" }}
-          >
-            <AlertTriangle className="w-4 h-4 shrink-0" style={{ color: ALERT }} />
-            <p className="font-tele text-xs leading-relaxed" style={{ color: "#fca97e" }}>
-              ARIA ALERT · hemodynamic instability predicted in {lead}h · pushed to Ward A team
-              in 0.4s
-            </p>
-          </div>
-        ) : (
-          <p className="font-tele text-xs text-slate-500 py-2">
-            <span className="aria-blink" style={{ color: TRACE }}>▮</span> ARIA watching · next
-            inference in 3s · projected stability horizon {lead}h
-          </p>
-        )}
-      </div>
-
-      {/* the interactive part */}
-      <div className="px-5 pb-5 pt-1">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
-            Try it — deteriorate the patient
-          </label>
-          <span className="font-tele text-[11px] text-slate-500">{severity}%</span>
-        </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={severity}
-          onChange={(e) => setSeverity(parseInt(e.target.value))}
-          className="aria-slider w-full"
-          aria-label="Simulated patient deterioration"
-        />
-        <div className="flex justify-between font-tele text-[10px] text-slate-600 mt-1.5">
-          <span>stable</span>
-          <span>septic shock</span>
-        </div>
+        <p className="font-tele text-xs text-slate-500 py-2">
+          <span className="aria-blink" style={{ color: TRACE }}>▮</span> Simulated preview ·
+          illustrative data, not live model output
+        </p>
       </div>
     </div>
   );
 }
 
-/* ---------- continuous live-events ticker ---------- */
+/* ---------- capability ticker ---------- */
 
 const TICKER_ITEMS = [
-  "WARD A · 3 BEDS CRITICAL",
-  "MODEL INFERENCE · 118ms AVG",
-  "WARD B · ALL STABLE",
-  "ALERT DISPATCHED · BED 07 → ON-CALL · 0.4s",
-  "WARD C · 1 BED ELEVATED RISK",
-  "AUDIT LOG · 1,204 EVENTS TODAY",
-  "SYSTEM UPTIME · 99.98%",
+  "PREDICTS INSTABILITY UP TO 6H AHEAD",
+  "SHAP EXPLANATION WITH EVERY SCORE",
+  "SUB-SECOND ALERT DELIVERY",
+  "PER-BED RISK ACROSS THREE WARDS",
+  "COMPLETE AUDIT TRAIL",
+  "ROLE-BASED ACCESS · 3 TIERS",
+  "TRAINED ON MIMIC-IV ICU DATA",
 ];
 
 function LiveTicker() {
@@ -575,7 +535,7 @@ export function Landing() {
               </a>
             </div>
             <p className="font-tele text-[11px] text-slate-600 mt-8">
-              ▸ The monitor on the right is live — drag the slider and watch ARIA react.
+              ▸ The monitor on the right is a simulated preview of the bedside view.
             </p>
           </div>
 
@@ -583,7 +543,7 @@ export function Landing() {
         </div>
       </section>
 
-      {/* ---------- live ticker ---------- */}
+      {/* ---------- capability ticker ---------- */}
       <LiveTicker />
 
       {/* ---------- stats ---------- */}

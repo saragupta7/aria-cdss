@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Users, UserPlus, Shield, Activity, ShieldAlert, Loader2 } from "lucide-react";
+import { Users, UserPlus, Shield, Activity, ShieldAlert, Loader2, KeyRound } from "lucide-react";
 import { authApi } from "../../api/auth";
 
 interface Staff {
@@ -17,6 +17,11 @@ export function StaffManagement() {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'senior' });
   const [creating, setCreating] = useState(false);
+
+  const [resetTarget, setResetTarget] = useState<Staff | null>(null);
+  const [tempPassword, setTempPassword] = useState('');
+  const [resetting, setResetting] = useState(false);
+  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     fetchStaff();
@@ -49,6 +54,22 @@ export function StaffManagement() {
     }
   };
 
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    setResetting(true);
+    try {
+      await authApi.adminResetPassword(resetTarget._id, tempPassword);
+      setNotice(`Temporary password set for ${resetTarget.email}. Share it with them securely — they can change it from the login page.`);
+      setResetTarget(null);
+      setTempPassword('');
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to reset password");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
 
   return (
@@ -68,6 +89,7 @@ export function StaffManagement() {
       </div>
 
       {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 font-medium border border-red-100">{error}</div>}
+      {notice && <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl mb-6 font-medium border border-emerald-100">{notice}</div>}
 
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <table className="w-full text-left">
@@ -77,6 +99,7 @@ export function StaffManagement() {
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Email</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Role</th>
               <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -109,11 +132,44 @@ export function StaffManagement() {
                     Active
                   </span>
                 </td>
+                <td className="px-6 py-4">
+                  <button
+                    onClick={() => { setNotice(''); setTempPassword(''); setResetTarget(user); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  >
+                    <KeyRound className="w-4 h-4" />
+                    Reset password
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {resetTarget && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border border-slate-200">
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Reset password</h2>
+            <p className="text-slate-500 font-medium mb-6">
+              Set a temporary password for <span className="font-bold text-slate-700">{resetTarget.name}</span> ({resetTarget.email}).
+              They can change it themselves from the login page.
+            </p>
+            <form onSubmit={handleReset} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Temporary Password</label>
+                <input required minLength={6} type="text" value={tempPassword} onChange={e => setTempPassword(e.target.value)} placeholder="At least 6 characters" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+              </div>
+              <div className="flex gap-3 mt-8">
+                <button type="button" onClick={() => setResetTarget(null)} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">Cancel</button>
+                <button type="submit" disabled={resetting} className="flex-1 px-4 py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50">
+                  {resetting ? 'Resetting...' : 'Set Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">

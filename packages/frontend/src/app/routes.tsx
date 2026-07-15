@@ -11,6 +11,7 @@ import { WardDetail } from "./components/WardDetail";
 import { WardOverview } from "./components/WardOverview";
 import { Landing } from "./components/Landing";
 import { Login } from "./components/Login";
+import { ChangePassword } from "./components/PasswordReset";
 import { StaffManagement } from "./components/StaffManagement";
 
 export const router = createBrowserRouter([
@@ -21,6 +22,10 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     Component: Login,
+  },
+  {
+    path: "/change-password",
+    Component: ChangePassword,
   },
   {
     path: "/dashboard",

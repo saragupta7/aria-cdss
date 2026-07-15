@@ -36,5 +36,17 @@ export const authApi = {
   changePassword: async (currentPassword: string, newPassword: string) => {
     const res = await api.patch('/auth/me/password', { currentPassword, newPassword })
     return res.data
+  },
+
+  // pre-login change: verifies email + current password, no JWT needed
+  changePasswordPreLogin: async (email: string, currentPassword: string, newPassword: string) => {
+    const res = await api.post('/auth/change-password', { email, currentPassword, newPassword })
+    return res.data
+  },
+
+  // admin sets a temporary password for a locked-out user
+  adminResetPassword: async (userId: string, newPassword: string) => {
+    const res = await api.patch(`/auth/users/${userId}/reset-password`, { newPassword })
+    return res.data
   }
 }

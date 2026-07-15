@@ -206,6 +206,70 @@ router.patch('/me/password', protect, async (req, res) => {
   }
 });
 
+//POST /api/auth/change-password
+// Pre-login password change: verifies email + current password (same rules
+// as login), then sets the new password. Responds 401 with the same message
+// for unknown email and wrong password so accounts can't be enumerated.
+router.post('/change-password', async (req, res) => {
+  try {
+    const { email, currentPassword, newPassword } = req.body;
+    if (!email || !currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Please provide email, current password and new password' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    }
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+    if (!user || !(await user.matchPassword(currentPassword))) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    user.password = newPassword;
+    await user.save();
+    await AuditLog.create({
+      user: user._id,
+      action: 'CHANGE_PASSWORD',
+      resource: 'Auth',
+      details: { email: user.email, via: 'login_page' },
+      ipAddress: req.ip
+    });
+    res.json({ message: 'Password updated successfully. You can now sign in.' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
+});
+
+//PATCH /api/auth/users/:id/reset-password
+// Admin sets a temporary password for a user (lockout recovery).
+// The user can then change it themselves from the login page.
+router.patch('/users/:id/reset-password', protect, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized as admin' });
+    }
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: 'Temporary password must be at least 6 characters' });
+    }
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    user.password = newPassword;
+    await user.save();
+    await AuditLog.create({
+      user: req.user._id,
+      action: 'ADMIN_RESET_PASSWORD',
+      resource: 'User',
+      resourceId: user._id,
+      details: { targetEmail: user.email },
+      ipAddress: req.ip
+    });
+    res.json({ message: `Temporary password set for ${user.email}` });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error: ' + error.message });
+  }
+});
+
 //GET /api/auth/users
 // Get all users (admin only)
 router.get('/users', protect, async (req, res) => {
