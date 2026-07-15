@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Patient = require('../models/Patient');
 const { protect } = require('../middleware/auth');
 const { roleCheck } = require('../middleware/roleCheck');
@@ -7,6 +8,20 @@ const { logAction } = require('../middleware/auditLog');
 const { getMlPrediction } = require('../services/vitalsEngine');
 
 router.use(protect);
+
+// Patients are addressed by Mongo _id internally and by their human-readable
+// patientId (e.g. "MIMIC-37412118") in URLs — every :id route accepts either.
+async function findPatientByAnyId(id, projection) {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    const patient = projection
+      ? await Patient.findById(id).select(projection)
+      : await Patient.findById(id);
+    if (patient) return patient;
+  }
+  return projection
+    ? Patient.findOne({ patientId: id }).select(projection)
+    : Patient.findOne({ patientId: id });
+}
 
 // POST /api/patients/sandbox/predict
 // Score a hypothetical patient built from the Training Sandbox sliders with
@@ -87,14 +102,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-      const mongoose = require('mongoose');
-      let patient;
-      if (mongoose.Types.ObjectId.isValid(req.params.id)) {
-        patient = await Patient.findById(req.params.id);
-      }
-      if (!patient) {
-        patient = await Patient.findOne({ patientId: req.params.id });
-      }
+      const patient = await findPatientByAnyId(req.params.id);
       if (!patient) {
         return res.status(404).json({ message: 'Patient not found' });
       }
@@ -151,7 +159,7 @@ router.post('/', roleCheck('admin', 'senior'), async (req, res) => {
 
 router.post('/:id/vitals', async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id);
+    const patient = await findPatientByAnyId(req.params.id);
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
@@ -192,7 +200,7 @@ router.post('/:id/vitals', async (req, res) => {
 // Clinical notes for a patient (most recent first)
 router.get('/:id/notes', async (req, res) => {
   try {
-    const patient = await Patient.findById(req.params.id).select('notes');
+    const patient = await findPatientByAnyId(req.params.id, 'notes');
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
@@ -213,7 +221,7 @@ router.post('/:id/notes', logAction('ADD_NOTE', 'Patient'), async (req, res) => 
     if (!text || !text.trim()) {
       return res.status(400).json({ message: 'Note text is required' });
     }
-    const patient = await Patient.findById(req.params.id);
+    const patient = await findPatientByAnyId(req.params.id);
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
@@ -237,7 +245,7 @@ router.post('/:id/notes', logAction('ADD_NOTE', 'Patient'), async (req, res) => 
 
 router.delete('/:id', roleCheck('admin'), logAction('DISCHARGE_PATIENT', 'Patient'), async (req, res) => {
     try {
-      const patient = await Patient.findById(req.params.id);
+      const patient = await findPatientByAnyId(req.params.id);
       if (!patient) {
         return res.status(404).json({ message: 'Patient not found' });
       }

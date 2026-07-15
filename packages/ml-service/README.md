@@ -27,6 +27,20 @@ uvicorn app:app --reload --port 8000
 
 Or from the repo root: `pnpm dev:ml` (see root `package.json`).
 
+## Docker
+
+```bash
+docker build -t aria-ml .
+docker run -p 8000:8000 aria-ml
+```
+
+The `Dockerfile`'s `COPY . .` bakes whatever is in `model/` into the image —
+put the trained artifacts there **before** building (they're produced offline
+and git-ignored, so a fresh clone builds an image with no model: `/health`
+reports `modelLoaded: false` and `/predict` returns 503 until you rebuild
+with artifacts present, while the backend serves its labeled heuristic
+fallback in the meantime).
+
 ## Providing a trained model
 
 `/predict` returns `503` until real model artifacts exist. Run the offline

@@ -101,6 +101,41 @@ only ever reads patients from MongoDB, so the git-ignored JSON never needs to
 leave your machine. Remember to set `CORS_ORIGINS` on the deployed backend to
 the deployed frontend's origin.
 
+## Deployment
+
+Three independently deployable pieces. Ports are configurable via `PORT` on
+backend and ml-service.
+
+**frontend** — static site. `VITE_API_URL` must point at the deployed
+backend's `/api` base **at build time** (Vite inlines it; it defaults to
+`http://localhost:5001/api` if unset, which will not work deployed):
+
+```bash
+VITE_API_URL=https://<backend-host>/api pnpm --filter frontend build
+# serve packages/frontend/dist with any static host (SPA fallback to index.html)
+```
+
+**backend** — Node process. Set the env vars from [Setup](#setup)
+(`MONGO_URI`, `JWT_SECRET`, `CORS_ORIGINS`, `ML_SERVICE_URL` pointing at the
+deployed ml-service), then:
+
+```bash
+pnpm --filter backend start      # node src/server.js
+```
+
+**ml-service** — has a `Dockerfile` (`packages/ml-service/Dockerfile`):
+
+```bash
+cd packages/ml-service
+docker build -t aria-ml .        # model/ artifacts must exist BEFORE building —
+docker run -p 8000:8000 aria-ml  # COPY . . bakes them into the image
+```
+
+Without Docker: `uvicorn app:app --host 0.0.0.0 --port 8000` (no `--reload`)
+from an environment with `requirements.txt` installed. If it's deployed
+without model artifacts, the app still works — every score falls back to the
+labeled heuristic.
+
 ## Backend API
 
 All routes require a JWT (`Authorization: Bearer <token>`) except
@@ -110,9 +145,11 @@ register/login. Base URL: `http://localhost:5001/api`.
 |---|---|---|
 | POST | `/auth/register` | Open only to bootstrap the first admin; afterwards admin-only |
 | POST | `/auth/login` | Returns JWT |
+| POST | `/auth/change-password` | Pre-login password change (verifies email + current password; no JWT) |
 | GET / PATCH | `/auth/me` | Current user profile |
-| PATCH | `/auth/me/password` | Change own password |
+| PATCH | `/auth/me/password` | Change own password (logged in) |
 | GET | `/auth/users` | All users (admin only) |
+| PATCH | `/auth/users/:id/reset-password` | Admin sets a temporary password (lockout recovery) |
 | GET | `/patients` | Active patients, risk-sorted, without vitals/mimicHistory |
 | GET | `/patients/:id` | One patient with last 48 vitals (accepts Mongo `_id` or `patientId`) |
 | POST | `/patients` | Admit (admin/senior); becomes a `simulated` patient |
@@ -130,6 +167,19 @@ register/login. Base URL: `http://localhost:5001/api`.
 
 ml-service (port 8000): `GET /health` (is a model loaded?),
 `POST /predict` — see [`packages/ml-service/README.md`](packages/ml-service/README.md).
+
+### Roles
+
+| | junior | senior | admin |
+|---|---|---|---|
+| View patients/alerts, notes, acknowledge/resolve alerts, sandbox | ✅ | ✅ | ✅ |
+| Admit patients | — | ✅ | ✅ |
+| Discharge patients | — | — | ✅ |
+| Admin analytics page | — | ✅ | ✅ |
+| Staff management, audit trail, stats, create accounts, reset passwords | — | — | ✅ |
+
+Enforcement lives in the backend (`roleCheck` middleware + inline checks);
+the frontend only hides nav items.
 
 ## How risk scoring flows
 

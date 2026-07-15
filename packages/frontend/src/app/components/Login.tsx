@@ -240,7 +240,7 @@ export function Login() {
           <div className="grid grid-cols-3 gap-px rounded-xl overflow-hidden border mt-4" style={{ borderColor: LINE }}>
             {[
               { label: "WARDS ONLINE", value: "3 / 3", color: TRACE },
-              { label: "MODEL AUC", value: "0.87", color: CYAN },
+              { label: "MODEL AUC", value: "0.83", color: CYAN },
               { label: "STREAM", value: "LIVE", color: TRACE },
             ].map((s) => (
               <div key={s.label} className="px-4 py-3" style={{ background: "#0e1f38" }}>

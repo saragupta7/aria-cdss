@@ -342,8 +342,8 @@ function StatsStrip() {
   }, []);
 
   const beds = useCountUp(50, active);
-  const auc = useCountUp(0.87, active, 2);
-  const lead = useCountUp(5.8, active, 1);
+  const auc = useCountUp(0.83, active, 2);
+  const lead = useCountUp(8.0, active, 1);
   const latency = useCountUp(0.9, active, 1);
 
   const stats = [
