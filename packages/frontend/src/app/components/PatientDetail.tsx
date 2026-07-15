@@ -84,11 +84,30 @@ export function PatientDetail() {
   };
 
   if (loading) {
-    return <div>Loading patient...</div>;
+    return (
+      <div className="bg-slate-50/50 min-h-screen flex items-center justify-center font-medium text-slate-500">
+        Loading patient...
+      </div>
+    );
   }
 
   if (error) {
-    return <div>{error}</div>;
+    return (
+      <div className="bg-slate-50/50 min-h-screen flex items-center justify-center px-6">
+        <div className="bg-white rounded-2xl p-10 text-center shadow-sm border border-slate-200 max-w-md w-full">
+          <p className="font-display text-xl font-bold text-slate-900 mb-2">Patient not found</p>
+          <p className="text-sm text-slate-500 font-medium mb-6">
+            This patient may have been discharged, or the link is wrong.
+          </p>
+          <Link
+            to="/dashboard/wards"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-sm transition-colors"
+          >
+            Back to wards
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (!patient) {

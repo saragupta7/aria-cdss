@@ -44,7 +44,7 @@ router.post('/', async (req, res) => {
     const { patient, type, message, severity } = req.body;
 
     const alert = await Alert.create({ patient, type, message, severity });
-    
+
     await alert.populate('patient', 'name icuBed patientId ward');
 
     res.status(201).json({
@@ -52,6 +52,9 @@ router.post('/', async (req, res) => {
       alert
     });
   } catch (error) {
+    if (error.name === 'ValidationError' || error.name === 'CastError') {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: error.message });
   }
 });
@@ -76,6 +79,9 @@ router.patch('/:id/acknowledge', logAction('ACKNOWLEDGE_ALERT', 'Alert'), async 
       await alert.save();
       res.json({ message: 'Alert acknowledged', alert });
     } catch (error) {
+      if (error.name === 'CastError') {
+        return res.status(404).json({ message: 'Alert not found' });
+      }
       res.status(500).json({ message: error.message });
     }
   }
@@ -99,6 +105,9 @@ router.patch('/:id/resolve', logAction('RESOLVE_ALERT', 'Alert'), async (req, re
       await alert.save();
       res.json({ message: 'Alert resolved', alert });
     } catch (error) {
+      if (error.name === 'CastError') {
+        return res.status(404).json({ message: 'Alert not found' });
+      }
       res.status(500).json({ message: error.message });
     }
   }

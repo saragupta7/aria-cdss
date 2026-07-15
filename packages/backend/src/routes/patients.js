@@ -148,12 +148,16 @@ router.post('/', roleCheck('admin', 'senior'), async (req, res) => {
         // MongoDB duplicate key error (patientId already exists)
         return res.status(400).json({ message: 'Patient ID already exists' });
       }
+      if (error.name === 'ValidationError') {
+        const messages = Object.values(error.errors).map(e => e.message);
+        return res.status(400).json({ message: messages.join(', ') });
+      }
       res.status(500).json({ message: error.message });
     }
   }
 );
 
-// POST /api/patients/:id/vitals 
+// POST /api/patients/:id/vitals
 // Record a new vitals reading for a patient
 // This will be called every 30 minutes by monitoring equipment (or simulated in Phase 4)
 

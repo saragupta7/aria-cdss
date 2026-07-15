@@ -12,6 +12,7 @@ import { WardOverview } from "./components/WardOverview";
 import { Landing } from "./components/Landing";
 import { Login } from "./components/Login";
 import { ChangePassword } from "./components/PasswordReset";
+import { NotFound } from "./components/NotFound";
 import { StaffManagement } from "./components/StaffManagement";
 
 export const router = createBrowserRouter([
@@ -41,6 +42,11 @@ export const router = createBrowserRouter([
       { path: "profile", Component: Profile },
       { path: "ward/:wardId", Component: WardDetail },
       { path: "staff", Component: StaffManagement },
+      { path: "*", Component: NotFound },
     ],
+  },
+  {
+    path: "*",
+    Component: NotFound,
   },
 ]);

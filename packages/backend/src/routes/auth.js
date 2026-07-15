@@ -266,6 +266,9 @@ router.patch('/users/:id/reset-password', protect, async (req, res) => {
     });
     res.json({ message: `Temporary password set for ${user.email}` });
   } catch (error) {
+    if (error.name === 'CastError') {
+      return res.status(404).json({ message: 'User not found' });
+    }
     res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
