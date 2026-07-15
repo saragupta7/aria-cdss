@@ -1,6 +1,7 @@
 # ARIA CDSS
 
-A clinical decision support system for ICU hemodynamic monitoring. Clinicians
+ARIA (**A**utomated **R**isk & **I**ntervention **A**ssistant) is a clinical
+decision support system for ICU hemodynamic monitoring. Clinicians
 see a live ward dashboard of ICU patients whose risk of hemodynamic
 instability (MAP < 65 mmHg or new vasopressor initiation, 4–6 hours ahead) is
 scored by **HemoAlert** — a calibrated XGBoost model trained on MIMIC-IV — with

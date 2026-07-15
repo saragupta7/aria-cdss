@@ -192,7 +192,7 @@ export function PatientDetail() {
           <div className="flex justify-between items-start mb-6">
             <div>
               <div className="flex items-center gap-4 mb-3">
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{patient.name}</h1>
+                <h1 className="font-display text-2xl font-bold text-slate-900 tracking-tight">{patient.name}</h1>
                 <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
                   displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
                   displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :

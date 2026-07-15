@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Building2, Users, AlertTriangle, Search, ChevronRight, UserPlus } from "lucide-react";
@@ -112,7 +113,7 @@ export function WardOverview() {
               <Building2 className="w-5 h-5 text-slate-700" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 leading-tight">Ward Overview</h1>
+              <h1 className="font-display text-2xl font-bold text-slate-900 leading-tight">Ward Overview</h1>
               <p className="text-sm text-slate-500 font-medium">System-wide patient distribution</p>
             </div>
           </div>
@@ -136,6 +137,7 @@ export function WardOverview() {
                 Admit Patient
               </button>
             )}
+            <HeaderClock />
           </div>
         </div>
 
@@ -250,7 +252,7 @@ export function WardOverview() {
                         <div className="space-y-2">
                           {(patient.riskLevel === 'high' || patient.riskLevel === 'critical') && (
                             <div className="bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#d97706] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-center">
-                              ⚠ Instability: {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
+                              Instability: {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
                             </div>
                           )}
                         </div>

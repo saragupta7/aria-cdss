@@ -473,7 +473,7 @@ export function Landing() {
             </div>
             <span className="font-display text-lg font-bold text-white tracking-wide">ARIA</span>
             <span className="hidden md:inline font-tele text-[10px] tracking-widest text-slate-500 border-l pl-3 ml-1" style={{ borderColor: LINE }}>
-              ICU DECISION SUPPORT
+              AUTOMATED RISK &amp; INTERVENTION ASSISTANT
             </span>
           </a>
           <div className="flex items-center gap-8">
@@ -631,12 +631,6 @@ export function Landing() {
                 We run technical demonstrations against retrospective data before any live
                 deployment — including model validation on your own patient population.
               </p>
-              <a
-                href="mailto:deploy@aria-medical.com"
-                className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-blue-500 hover:bg-blue-400 text-white font-bold text-sm transition-colors shadow-lg shadow-blue-500/25"
-              >
-                Schedule a demonstration <ArrowRight className="w-4 h-4" />
-              </a>
             </div>
           </Section>
         </div>
@@ -650,7 +644,7 @@ export function Landing() {
               <Activity className="w-4 h-4 text-white" />
             </div>
             <span className="font-tele text-[11px] tracking-widest text-slate-500">
-              ARIA · AUTOMATED RISK & INTERVENTION ASSISTANT
+              ARIA · AUTOMATED RISK &amp; INTERVENTION ASSISTANT
             </span>
           </div>
           <p className="font-tele text-[11px] text-slate-600">

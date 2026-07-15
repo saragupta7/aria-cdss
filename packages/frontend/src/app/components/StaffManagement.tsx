@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useState, useEffect } from "react";
 import { Users, UserPlus, Shield, Activity, ShieldAlert, Loader2, KeyRound } from "lucide-react";
 import { authApi } from "../../api/auth";
@@ -76,16 +77,19 @@ export function StaffManagement() {
     <div className="p-8 max-w-[1200px] mx-auto min-h-screen bg-slate-50/50">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Staff Management</h1>
+          <h1 className="font-display text-2xl font-bold text-slate-900">Staff Management</h1>
           <p className="text-slate-500 font-medium mt-1">Manage clinical and administrative access</p>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          className="bg-[#0f172a] text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-sm"
-        >
-          <UserPlus className="w-5 h-5" />
-          Add Clinician
-        </button>
+        <div className="flex items-center gap-6">
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-[#0f172a] text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-colors shadow-sm"
+          >
+            <UserPlus className="w-5 h-5" />
+            Add Clinician
+          </button>
+          <HeaderClock />
+        </div>
       </div>
 
       {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 font-medium border border-red-100">{error}</div>}
@@ -116,7 +120,7 @@ export function StaffManagement() {
                 <td className="px-6 py-4 text-slate-500 font-medium">{user.email}</td>
                 <td className="px-6 py-4">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
-                    user.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                    user.role === 'admin' ? 'bg-slate-900 text-white' :
                     user.role === 'senior' ? 'bg-blue-100 text-blue-700' :
                     'bg-slate-100 text-slate-700'
                   }`}>

@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Search, Download, ShieldCheck, Activity, Users, AlertTriangle, Loader2 } from "lucide-react";
 import { adminApi, type AuditLogEntry } from "../../api/admin";
@@ -111,11 +112,11 @@ export function AuditTrail() {
               <ShieldCheck className="w-5 h-5 text-slate-700" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 leading-tight">Audit Trail</h1>
+              <h1 className="font-display text-2xl font-bold text-slate-900 leading-tight">Audit Trail</h1>
               <p className="text-sm text-slate-500 font-medium">System access and action log</p>
             </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex items-center gap-3">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-11 w-80 flex items-center px-4 focus-within:ring-2 focus-within:ring-[#3b82f6]">
               <Search className="w-4 h-4 text-slate-400 mr-3" />
               <input
@@ -132,6 +133,7 @@ export function AuditTrail() {
             >
               <Download className="w-4 h-4" /> Export CSV
             </button>
+            <HeaderClock />
           </div>
         </div>
 

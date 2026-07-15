@@ -139,7 +139,7 @@
 
 
 import { Link, useNavigate } from "react-router";
-import { Activity, Mail, Lock, Loader2, AlertCircle, ArrowLeft } from "lucide-react";
+import { Activity, Mail, Lock, Loader2, AlertCircle, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import { authApi } from "../../api/auth";
 
@@ -184,6 +184,7 @@ export function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -199,7 +200,9 @@ export function Login() {
       console.error("Login Error:", err);
       setError(
         err.response?.data?.message ||
-          "Failed to authenticate. Please check your credentials."
+          (err.request
+            ? "Cannot reach the server — make sure the backend is running."
+            : "Failed to authenticate. Please check your credentials.")
       );
     } finally {
       setIsLoading(false);
@@ -309,14 +312,23 @@ export function Login() {
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isLoading}
-                  className="w-full pl-12 pr-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 disabled:opacity-50"
+                  className="w-full pl-12 pr-12 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all placeholder:text-slate-400 disabled:opacity-50"
                   placeholder="Enter your password"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
             </div>
 

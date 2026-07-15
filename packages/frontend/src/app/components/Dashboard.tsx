@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { Search, Activity, AlertCircle, Droplet } from "lucide-react";
+import { Search, Activity, AlertCircle, Droplet, ArrowRight } from "lucide-react";
 import { patientsApi } from "../../api/patients";
+import { HeaderClock } from "./HeaderClock";
 import { alertsApi } from "../../api/alerts";
 import type { Patient, Alert } from "@aria/shared";
 import {
@@ -140,8 +141,12 @@ export function Dashboard() {
       {/* Header & Search */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 mb-1">Dashboard</h1>
-          <p className="text-sm text-slate-500 font-medium">Real-time patient monitoring overview</p>
+          <h1 className="font-display text-7xl font-bold tracking-tight leading-none mb-2 text-slate-900">
+            ARIA
+          </h1>
+          <p className="font-tele text-[11px] tracking-[0.25em] text-slate-500 uppercase">
+            Automated Risk &amp; Intervention Assistant
+          </p>
         </div>
         
         <div className="flex items-center gap-6">
@@ -155,6 +160,7 @@ export function Dashboard() {
               className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
             />
           </div>
+          <HeaderClock />
         </div>
       </div>
 
@@ -310,9 +316,9 @@ export function Dashboard() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
           {wardGroups.map(({ ward, patients }) => (
-            <WardCard key={ward} ward={ward} patients={patients} />
+            <WardTile key={ward} ward={ward} patients={patients} />
           ))}
         </div>
       </div>
@@ -338,87 +344,50 @@ function HighlightCard({ title, value, subtitle, icon: Icon, accentColor, bgAcce
   );
 }
 
-// Refined Ward Card
-function WardCard({ ward, patients }: { ward: string; patients: DashboardPatient[] }) {
-  const criticalCount = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
-  const moderateCount = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
-  const stableCount = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
+// Compact ward tile — census + acuity mix at a glance; click through for patients
+function WardTile({ ward, patients }: { ward: string; patients: DashboardPatient[] }) {
+  const critical = patients.filter(p => p.displayRiskLevel === 'CRITICAL').length;
+  const moderate = patients.filter(p => p.displayRiskLevel === 'MODERATE').length;
+  const stable = patients.filter(p => p.displayRiskLevel === 'STABLE').length;
+  const total = patients.length;
+  const pct = (n: number) => (total ? `${(n / total) * 100}%` : '0%');
 
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all hover:border-slate-300">
-      <div className="flex items-center justify-between mb-6 pb-6 border-b border-slate-100">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold text-xl shadow-sm">
+    <Link
+      to={`/dashboard/ward/${ward}`}
+      className="group bg-white rounded-2xl p-5 shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-300 hover:-translate-y-0.5 transition-all"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-sm">
             {ward}
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Ward {ward}</h3>
-            <p className="text-sm text-slate-500 font-medium">{patients.length} active patients</p>
+            <h3 className="font-bold text-slate-900 leading-tight">Ward {ward}</h3>
+            <p className="text-xs text-slate-500 font-medium">{total} active patients</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-8">
-          <div className="flex items-center gap-6">
-            <StatColumn label="Stable" value={stableCount} dotColor="bg-[#3b82f6]" textColor="text-[#3b82f6]" />
-            <div className="w-px h-8 bg-slate-200"></div>
-            <StatColumn label="Moderate" value={moderateCount} dotColor="bg-[#f59e0b]" textColor="text-[#f59e0b]" />
-            <div className="w-px h-8 bg-slate-200"></div>
-            <StatColumn label="Critical" value={criticalCount} dotColor="bg-[#e85d22]" textColor="text-[#e85d22]" />
-          </div>
-
-          <Link
-            to={`/dashboard/ward/${ward}`}
-            className="px-5 py-2.5 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-800 hover:text-white transition-all text-sm font-bold shadow-sm"
-          >
-            Manage Ward
-          </Link>
-        </div>
+        <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all" />
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        {patients.map((patient) => (
-          <Link
-            key={patient.patientId}
-            to={`/dashboard/patient/${patient.patientId}`}
-            className="bg-slate-50/50 rounded-xl p-4 border border-slate-200 transition-all hover:shadow-md hover:border-slate-300 group"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
-                'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-sm ${
-                  patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                  patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
-                  'bg-[#e85d22] animate-pulse'
-                }`}></span>
-                {patient.displayRiskLevel}
-              </div>
-              <span className="text-[10px] font-bold text-slate-400">{patient.patientId}</span>
-            </div>
-            
-            <div className="text-slate-900 text-sm font-bold mb-1 group-hover:text-slate-600 transition-colors">
-              {patient.name}
-            </div>
-            <div className="text-slate-500 text-xs font-medium">
-              {patient.age}y, {patient.gender || 'Unknown'} • Bed {patient.bed}
-            </div>
-          </Link>
-        ))}
+      {/* segmented acuity bar */}
+      <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mb-3">
+        {stable > 0 && <div style={{ width: pct(stable), background: '#3b82f6' }} />}
+        {moderate > 0 && <div style={{ width: pct(moderate), background: '#f59e0b' }} />}
+        {critical > 0 && <div className="animate-pulse" style={{ width: pct(critical), background: '#e85d22' }} />}
       </div>
-    </div>
-  );
-}
 
-function StatColumn({ label, value, dotColor, textColor }: { label: string, value: number, dotColor: string, textColor: string }) {
-  return (
-    <div className="text-center min-w-[60px]">
-      <p className={`text-xl font-bold ${textColor} leading-none mb-1`}>{value}</p>
-      <div className="flex items-center justify-center gap-1.5">
-        <div className={`w-1.5 h-1.5 rounded-sm ${dotColor}`}></div>
-        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{label}</p>
+      <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider">
+        <span className="flex items-center gap-1.5 text-slate-500">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" /> {stable} stable
+        </span>
+        <span className="flex items-center gap-1.5 text-slate-500">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" /> {moderate} moderate
+        </span>
+        <span className={`flex items-center gap-1.5 ${critical > 0 ? 'text-[#e85d22]' : 'text-slate-400'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full bg-[#e85d22] ${critical > 0 ? 'animate-pulse' : 'opacity-40'}`} /> {critical} critical
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }

@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useEffect, useState } from "react";
 import { LogOut, Loader2 } from "lucide-react";
 import {
@@ -43,7 +44,10 @@ export function Profile() {
   return (
     <div className="bg-slate-50/50 min-h-screen p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-slate-900 mb-8">User Settings</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="font-display text-2xl font-bold text-slate-900">User Settings</h1>
+          <HeaderClock />
+        </div>
 
         {/* Profile Header */}
         <div className="bg-white rounded-3xl shadow-sm border border-slate-200 mb-6 overflow-hidden">

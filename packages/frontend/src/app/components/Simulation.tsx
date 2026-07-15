@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useState, useEffect } from "react";
 import { FlaskConical, RefreshCcw, Check, BrainCircuit, Calculator } from "lucide-react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -117,14 +118,17 @@ export function Simulation() {
       <div className="max-w-[1400px] mx-auto">
         
         {/* Header */}
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-            <FlaskConical className="w-5 h-5 text-slate-700" />
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+              <FlaskConical className="w-5 h-5 text-slate-700" />
+            </div>
+            <div>
+              <h1 className="font-display text-2xl font-bold text-slate-900 leading-tight">Training Sandbox</h1>
+              <p className="text-sm text-slate-500 font-medium">Modify parameters to see how the AI predicts instability</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900 leading-tight">Training Sandbox</h1>
-            <p className="text-sm text-slate-500 font-medium">Modify parameters to see how the AI predicts instability</p>
-          </div>
+          <HeaderClock />
         </div>
 
         <div className="grid grid-cols-12 gap-8">

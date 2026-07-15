@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useParams, Link, useNavigate } from "react-router";
 import { ArrowLeft, AlertTriangle, Search, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -131,10 +132,11 @@ export function WardDetail() {
               {wardId}
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-slate-900 leading-tight">Ward {wardId}</h1>
+              <h1 className="font-display text-2xl font-bold text-slate-900 leading-tight">Ward {wardId}</h1>
               <p className="text-sm text-slate-500 font-medium">{wardPatients.length} active patients</p>
             </div>
           </div>
+          <HeaderClock />
         </div>
 
         {/* Stats */}
@@ -241,7 +243,7 @@ export function WardDetail() {
                           </span>
                           {(patient.riskLevel === 'high' || patient.riskLevel === 'critical') && (
                             <span className="text-[10px] font-bold text-[#d97706] whitespace-nowrap">
-                              ⚠ Instability in {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
+                              Instability in {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
                             </span>
                           )}
                         </div>

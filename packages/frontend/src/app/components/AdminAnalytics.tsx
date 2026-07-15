@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useEffect, useMemo, useState } from "react";
 import {
   BarChart,
@@ -142,14 +143,17 @@ export function AdminAnalytics() {
   return (
     <div className="bg-slate-50 min-h-screen p-8">
       <div className="max-w-[1600px] mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
-            <BarChart3 className="w-5 h-5 text-slate-700" />
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center shadow-sm">
+              <BarChart3 className="w-5 h-5 text-slate-700" />
+            </div>
+            <div>
+              <h1 className="font-display text-2xl font-bold text-slate-900">Analytics</h1>
+              <p className="text-sm text-slate-500">Operational metrics across the ICU</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
-            <p className="text-sm text-slate-500">Operational metrics across the ICU</p>
-          </div>
+          <HeaderClock />
         </div>
 
         {/* KPI CARDS */}

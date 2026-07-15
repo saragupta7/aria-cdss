@@ -89,6 +89,7 @@ import {
   Users as UsersIcon,
 } from "lucide-react";
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { alertsApi } from "../../api/alerts";
 
 /* ============================================================
    ARIA app shell — same routes, upgraded sidebar:
@@ -108,6 +109,26 @@ function RootLayout() {
   const location = useLocation();
   const { user } = useAuth();
 
+  // Alert Center badge — lit only while there are active alerts
+  const [hasActiveAlerts, setHasActiveAlerts] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const alerts = await alertsApi.getAll("active");
+        if (!cancelled) setHasActiveAlerts(alerts.length > 0);
+      } catch {
+        // keep last known state on transient failures
+      }
+    };
+    check();
+    const id = setInterval(check, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
   const isActive = (path: string) => {
     if (path === "/dashboard" && location.pathname === "/dashboard") return true;
     if (path !== "/dashboard" && location.pathname.startsWith(path)) return true;
@@ -119,7 +140,11 @@ function RootLayout() {
       {/* Sidebar */}
       <div className="w-[90px] bg-[#0f172a] flex flex-col items-center py-6 relative shadow-2xl border-r border-slate-800 z-30">
         {/* Logo */}
-        <Link to="/dashboard" className="mb-8 group relative">
+        <Link
+          to="/dashboard"
+          className="mb-8 group relative"
+          title="ARIA — Automated Risk & Intervention Assistant"
+        >
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/25 transition-transform group-hover:scale-105">
             <Activity className="w-6 h-6 text-white" />
           </div>
@@ -144,7 +169,7 @@ function RootLayout() {
             icon={Bell}
             label="Alert Center"
             active={isActive("/dashboard/alerts")}
-            hasBadge
+            hasBadge={hasActiveAlerts}
           />
           <NavIcon
             to="/dashboard/wards"
@@ -194,8 +219,7 @@ function RootLayout() {
           )}
         </nav>
 
-        {/* Clock + profile */}
-        <SidebarClock />
+        {/* Profile */}
         <Link
           to="/dashboard/profile"
           className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all shadow-md ${
@@ -212,24 +236,6 @@ function RootLayout() {
       <div className="flex-1 overflow-auto h-screen relative">
         <Outlet />
       </div>
-    </div>
-  );
-}
-
-function SidebarClock() {
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(id);
-  }, []);
-  return (
-    <div className="mb-4 text-center">
-      <p className="font-tele text-[11px] font-bold text-slate-300 leading-none">
-        {now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
-      </p>
-      <p className="font-tele text-[8px] tracking-widest text-slate-600 mt-1 uppercase">
-        {now.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "short" })}
-      </p>
     </div>
   );
 }

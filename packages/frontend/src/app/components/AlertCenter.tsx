@@ -1,3 +1,4 @@
+import { HeaderClock } from "./HeaderClock";
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Bell, Clock, CheckCircle2, AlertTriangle, Search, Loader2 } from "lucide-react";
@@ -124,19 +125,22 @@ export function AlertCenter() {
               <Bell className="w-5 h-5 text-slate-700" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 leading-tight">Alert Center</h1>
+              <h1 className="font-display text-2xl font-bold text-slate-900 leading-tight">Alert Center</h1>
               <p className="text-sm text-slate-500 font-medium">Manage and acknowledge clinical warnings</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-11 w-80 flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-blue-100">
-            <Search className="w-4 h-4 text-slate-400 mr-3" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search alert history..."
-              className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
-            />
+          <div className="flex items-center gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-11 w-80 flex items-center px-4 transition-all focus-within:ring-2 focus-within:ring-blue-100">
+              <Search className="w-4 h-4 text-slate-400 mr-3" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search alert history..."
+                className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
+              />
+            </div>
+            <HeaderClock />
           </div>
         </div>
 
