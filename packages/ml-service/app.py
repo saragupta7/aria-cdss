@@ -2,7 +2,7 @@
 HemoAlert inference service.
 
 Loads the model artifacts produced by the HemoAlert training pipeline
-(PIPELINE.md) and exposes them over HTTP so the Node/Express backend
+and exposes them over HTTP so the Node/Express backend
 (packages/backend) can score patients without needing a Python runtime
 in-process. Called from packages/backend/src/services/vitalsEngine.js.
 
@@ -123,7 +123,7 @@ def predict(req: PredictRequest) -> dict[str, Any]:
             status_code=503,
             detail=(
                 "No trained model loaded. Run the HemoAlert training pipeline "
-                f"(PIPELINE.md) and drop its output into {MODEL_DIR}."
+                f"and drop its output into {MODEL_DIR}."
             ),
         )
     if not req.vitalsHistory:

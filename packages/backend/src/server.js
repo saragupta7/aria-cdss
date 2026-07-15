@@ -9,9 +9,20 @@ connectDB().then(() => seedUser());
 
 const app = express();
 
+// Additional allowed origins for deployed frontends, comma-separated,
+// e.g. CORS_ORIGINS=https://aria-cdss.vercel.app,https://aria.example.com
+const extraOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/$/, ''))
+  .filter(Boolean);
+
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+    if (
+      !origin ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+      extraOrigins.includes(origin)
+    ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));

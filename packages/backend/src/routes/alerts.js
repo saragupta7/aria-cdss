@@ -25,7 +25,7 @@ router.get('/', async (req, res) => {
     }
     const alerts = await Alert
       .find(filter)
-      .populate('patient', 'name icuBed patientId')
+      .populate('patient', 'name icuBed patientId ward')
       .populate('acknowledgedBy', 'name role')
       .populate('resolvedBy', 'name role')
       .sort({ createdAt: -1 });
@@ -45,7 +45,7 @@ router.post('/', async (req, res) => {
 
     const alert = await Alert.create({ patient, type, message, severity });
     
-    await alert.populate('patient', 'name icuBed patientId');
+    await alert.populate('patient', 'name icuBed patientId ward');
 
     res.status(201).json({
       message: 'Alert created',
@@ -111,7 +111,7 @@ router.get('/audit', async (req, res) => {
   try {
     const alerts = await Alert
       .find({})
-      .populate('patient', 'name icuBed patientId')
+      .populate('patient', 'name icuBed patientId ward')
       .populate('acknowledgedBy', 'name role')
       .populate('resolvedBy', 'name role')
       .sort({ createdAt: -1 })

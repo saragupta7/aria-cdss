@@ -6,9 +6,8 @@ CDSS. The Node/Express backend (`packages/backend`) calls this over HTTP from
 unreachable or has no model loaded, the backend falls back to its built-in
 heuristic risk formula automatically — nothing else in the app breaks.
 
-Training happens separately, in Colab/Kaggle against MIMIC-IV — see
-[`PIPELINE.md`](./PIPELINE.md) for the full pipeline. This directory is just
-the serving side.
+Training happens separately, in Colab/Kaggle against MIMIC-IV. This directory
+is just the serving side.
 
 ## Setup
 
@@ -30,9 +29,8 @@ Or from the repo root: `pnpm dev:ml` (see root `package.json`).
 
 ## Providing a trained model
 
-`/predict` returns `503` until real model artifacts exist. Run the training
-pipeline in `PIPELINE.md` through Phase 5, then copy its output into
-`model/`:
+`/predict` returns `503` until real model artifacts exist. Run the offline
+training pipeline, then copy its output into `model/`:
 
 ```
 model/

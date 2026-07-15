@@ -99,7 +99,7 @@ router.get('/:id', async (req, res) => {
         return res.status(404).json({ message: 'Patient not found' });
       }
       const patientData = patient.toObject();
-      // last 24 hours vitals (consifering gap of 30 minutes between each reading )
+      // last 24 hours of vitals (assuming a 30-minute gap between readings)
       patientData.vitals = patientData.vitals.slice(-48);
       // Unrevealed future readings for MIMIC replay patients — never sent to clients
       delete patientData.mimicHistory;

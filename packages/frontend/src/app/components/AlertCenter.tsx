@@ -64,7 +64,12 @@ export function AlertCenter() {
 
   if (loading) return <div className="p-8 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>;
 
-  const wardOf = (a: Alert) => (a.patient?.icuBed ? a.patient.icuBed.charAt(0).toUpperCase() : "");
+  // Prefer the real ward code (MIMIC wards are multi-letter, e.g. "MICU");
+  // fall back to the bed's first letter for older alerts without one.
+  const wardOf = (a: Alert) =>
+    a.patient?.ward || (a.patient?.icuBed ? a.patient.icuBed.charAt(0).toUpperCase() : "");
+
+  const wardOptions = Array.from(new Set(alerts.map(wardOf).filter(Boolean))).sort();
 
   const activeAlerts = alerts.filter(a => a.status === 'active').length;
 
@@ -213,9 +218,9 @@ export function AlertCenter() {
                 className="text-sm border border-slate-200 rounded-lg px-3 py-1.5 text-slate-700 bg-white font-medium outline-none focus:ring-2 focus:ring-blue-100"
               >
                 <option value="all">All Wards</option>
-                <option value="A">Ward A</option>
-                <option value="B">Ward B</option>
-                <option value="C">Ward C</option>
+                {wardOptions.map((w) => (
+                  <option key={w} value={w}>Ward {w}</option>
+                ))}
               </select>
               <select
                 value={statusFilter}

@@ -1,11 +1,20 @@
+# frontend
 
-  # ARIA
+React + Vite + Tailwind single-page app for the ARIA CDSS: login, live ward
+dashboards, patient detail with vitals charts and SHAP explanations, alert
+center, audit trail, staff management, and a Training Sandbox.
 
-  This is a code bundle for ARIA. The original project is available at https://www.figma.com/design/kivFZSlSBzPLvFyMPhTwoX/ARIA.
+Talks to the backend REST API (`packages/backend`, port 5001) with JWT auth;
+shared request/response types live in `@aria/shared`.
 
-  ## Running the code
+## Running
 
-  Run `npm i` to install the dependencies.
+From the repo root:
 
-  Run `npm run dev` to start the development server.
-  
+```bash
+pnpm install
+pnpm dev:fe        # or `pnpm dev` to run backend + frontend together
+```
+
+The dev server runs on http://localhost:5173. See the root
+[README](../../README.md) for full setup (backend env, ml-service, seeding).

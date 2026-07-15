@@ -2,7 +2,7 @@
 Real-time feature engineering for HemoAlert inference.
 
 This mirrors the offline feature engineering in the HemoAlert training
-pipeline (see PIPELINE.md, Phase 4) so the features a live patient is scored
+pipeline so the features a live patient is scored
 on are computed the exact same way the model was trained on. If you change
 anything here, make the matching change in the training notebook — a
 mismatch here is a silent train/serve skew bug, not a crash.

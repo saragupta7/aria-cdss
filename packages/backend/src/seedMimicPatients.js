@@ -13,7 +13,7 @@ async function seed() {
   if (!fs.existsSync(DATA_PATH)) {
     console.error(
       `Missing ${DATA_PATH}.\n` +
-      'Run PIPELINE.md Phase 8 in Colab and copy the exported demo_patients.json here.'
+      'Export demo_patients.json from the offline Colab pipeline and copy it here.'
     );
     process.exit(1);
   }

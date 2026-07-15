@@ -27,7 +27,8 @@ packages/shared     Shared TypeScript types (@aria/shared)
   automatically** and the UI labels scores "Heuristic estimate" instead of
   "HemoAlert model" — nothing breaks.
 - **frontend** renders the dashboard, ward views, patient detail (vitals
-  charts + SHAP tab), alert center, admin analytics, and a Training Sandbox.
+  charts + SHAP tab), alert center, admin analytics, audit trail, staff
+  management, and a Training Sandbox.
 
 ## Patient data sources
 
@@ -43,8 +44,9 @@ MIMIC patients keep their real care-unit codes as wards (MICU, SICU, CVICU,
 (`MIMIC Patient #<subject_id>`) since the source data is de-identified.
 The imported JSON (`packages/backend/src/data/mimicPatients.json`) is
 **git-ignored** — it derives from MIMIC-IV, which is credentialed-access data
-under PhysioNet's data use agreement. Regenerate it with Phase 8 of
-[`packages/ml-service/PIPELINE.md`](packages/ml-service/PIPELINE.md).
+under PhysioNet's data use agreement, so it is exported offline (from the
+same Colab/BigQuery environment that trains the model) and dropped in
+locally.
 
 ## Setup
 
@@ -55,7 +57,10 @@ pnpm install
 
 # backend env
 #   packages/backend/.env: MONGO_URI, JWT_SECRET, PORT=5001,
-#                          ML_SERVICE_URL=http://localhost:8000 (default)
+#                          ML_SERVICE_URL=http://localhost:8000 (default),
+#                          JWT_EXPIRES_IN=24h (default),
+#                          CORS_ORIGINS=<comma-separated deployed frontend
+#                          origins; localhost is always allowed>
 
 # ml-service
 cd packages/ml-service
@@ -63,7 +68,7 @@ python -m venv .venv
 source .venv/Scripts/activate      # Git Bash on Windows; .venv\Scripts\activate in cmd
 pip install -r requirements.txt
 # drop trained artifacts into model/  (xgb_calibrated.pkl, feature_cols.csv,
-# metadata.json — produced by PIPELINE.md Phases 1–5 in Colab)
+# metadata.json — produced by the offline Colab/BigQuery training pipeline)
 ```
 
 ### Running
@@ -80,8 +85,8 @@ and `test@aria.com` / `CHANGEME` (junior).
 
 ### Seeding the 50 MIMIC-IV patients
 
-With `mimicPatients.json` in place (PIPELINE.md Phase 8) and ml-service
-running (so initial scores come from the real model):
+With `mimicPatients.json` in place and ml-service running (so initial scores
+come from the real model):
 
 ```bash
 pnpm --filter backend seed:mimic
@@ -89,6 +94,12 @@ pnpm --filter backend seed:mimic
 
 Re-running it replaces all `dataSource: 'mimic'` patients and restarts their
 replays; UI-admitted patients are untouched.
+
+To make these patients available in a **deployed** environment, run the same
+command with `MONGO_URI` pointed at the production database — the running app
+only ever reads patients from MongoDB, so the git-ignored JSON never needs to
+leave your machine. Remember to set `CORS_ORIGINS` on the deployed backend to
+the deployed frontend's origin.
 
 ## Backend API
 
@@ -101,6 +112,7 @@ register/login. Base URL: `http://localhost:5001/api`.
 | POST | `/auth/login` | Returns JWT |
 | GET / PATCH | `/auth/me` | Current user profile |
 | PATCH | `/auth/me/password` | Change own password |
+| GET | `/auth/users` | All users (admin only) |
 | GET | `/patients` | Active patients, risk-sorted, without vitals/mimicHistory |
 | GET | `/patients/:id` | One patient with last 48 vitals (accepts Mongo `_id` or `patientId`) |
 | POST | `/patients` | Admit (admin/senior); becomes a `simulated` patient |
@@ -133,16 +145,36 @@ ml-service (port 8000): `GET /health` (is a model loaded?),
 4. A fresh `high`/`critical` level raises an Alert unless one is already
    active for that patient.
 
-The Training Sandbox does the same dance per slider change through
+The Training Sandbox follows the same flow on every slider change through
 `/patients/sandbox/predict`, with a badge showing whether the displayed score
 came from the model or the heuristic.
 
-## Model training
+## Next steps
 
-Entirely offline (Colab/Kaggle + BigQuery against MIMIC-IV) — see
-[`packages/ml-service/PIPELINE.md`](packages/ml-service/PIPELINE.md):
-cohort extraction (Phase 2), labeling (Phase 3), feature engineering
-(Phase 4, mirrored 1:1 by `features.py` at serving time), XGBoost +
-calibration + SHAP (Phase 5), serving integration (Phase 7), demo patient
-import (Phase 8). The app never touches MIMIC-IV directly — only the trained
-artifacts and the pre-exported patient JSON.
+The current system runs on replayed and simulated data. Taking it toward real
+clinical use would mean:
+
+- **EHR integration** — replace the seed/simulation pipeline with live data
+  from hospital EHR systems (Epic, Cerner/Oracle Health) via **HL7 FHIR**
+  APIs: ADT feeds for admissions/discharges instead of the "Admit Patient"
+  form, and `Observation` resources for vitals and labs instead of the
+  vitals engine tick.
+- **Bedside monitor streaming** — ingest continuous vitals directly from
+  patient monitors (e.g. via an integration engine like Mirth/Rhapsody or
+  vendor gateways) rather than 60-second polled snapshots.
+- **SMART on FHIR / SSO** — launch inside the EHR and authenticate against
+  hospital identity providers (SAML/OIDC, Active Directory) instead of the
+  local JWT user store.
+- **Prospective validation** — run in silent/shadow mode alongside clinicians
+  to measure real-world alert precision, lead time, and alert-fatigue burden
+  before surfacing alerts.
+- **Model monitoring & retraining** — track calibration drift on live data,
+  and retrain per-site since MIMIC-IV (a single Boston center) will not
+  transfer perfectly to other populations.
+- **Regulatory & compliance** — clinical decision support of this kind is
+  software-as-a-medical-device territory (FDA/CE depending on market), plus
+  HIPAA-grade audit, encryption at rest, and BAAs for any hosted
+  infrastructure.
+- **Operational hardening** — WebSocket push instead of frontend polling,
+  horizontal scaling of the ml-service, and per-ward alert routing/paging
+  integration (e.g. to nurse call or messaging systems).

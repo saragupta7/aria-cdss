@@ -29,6 +29,7 @@ export function WardOverview() {
   const [patients, setPatients] = useState<OverviewPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
   const { user } = useAuth();
   const [showAdmitModal, setShowAdmitModal] = useState(false);
 
@@ -65,15 +66,32 @@ export function WardOverview() {
     return <div className="min-h-screen p-8 bg-slate-50/50 flex items-center justify-center font-medium text-red-500">{error}</div>;
   }
 
-  const wards = Array.from(new Set(patients.map(p => p.ward).filter(Boolean))).sort();
+  // A ward stays fully visible when its name matches the query; otherwise
+  // it is narrowed down to just its matching patients (and hidden if none).
+  const q = search.trim().toLowerCase();
+  const matchesPatient = (p: OverviewPatient) =>
+    p.name.toLowerCase().includes(q) ||
+    (p.patientId || '').toLowerCase().includes(q) ||
+    (p.icuBed || '').toLowerCase().includes(q) ||
+    (p.diagnosis || '').toLowerCase().includes(q);
+
+  const wards = Array.from(new Set(patients.map(p => p.ward).filter(Boolean)))
+    .sort()
+    .filter(ward =>
+      !q ||
+      `ward ${ward}`.toLowerCase().includes(q) ||
+      patients.some(p => p.ward === ward && matchesPatient(p))
+    );
 
   const getWardStats = (ward: string) => {
-    const wardPatients = patients.filter(p => p.ward === ward);
+    const allWardPatients = patients.filter(p => p.ward === ward);
+    const wardMatchesQuery = !q || `ward ${ward}`.toLowerCase().includes(q);
+    const wardPatients = wardMatchesQuery ? allWardPatients : allWardPatients.filter(matchesPatient);
     return {
-      total: wardPatients.length,
-      critical: wardPatients.filter(p => p.displayRiskLevel === 'CRITICAL').length,
-      moderate: wardPatients.filter(p => p.displayRiskLevel === 'MODERATE').length,
-      stable: wardPatients.filter(p => p.displayRiskLevel === 'STABLE').length,
+      total: allWardPatients.length,
+      critical: allWardPatients.filter(p => p.displayRiskLevel === 'CRITICAL').length,
+      moderate: allWardPatients.filter(p => p.displayRiskLevel === 'MODERATE').length,
+      stable: allWardPatients.filter(p => p.displayRiskLevel === 'STABLE').length,
       patients: wardPatients,
     };
   };
@@ -103,6 +121,8 @@ export function WardOverview() {
               <Search className="w-4 h-4 text-slate-400 mr-3" />
               <input
                 type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search wards or patients..."
                 className="flex-1 bg-transparent border-none outline-none text-sm text-slate-700 placeholder:text-slate-400"
               />
@@ -153,6 +173,11 @@ export function WardOverview() {
 
         {/* Ward Sections */}
         <div className="space-y-6">
+          {wards.length === 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 px-6 py-12 text-center text-slate-400 font-medium">
+              No wards or patients match "{search}".
+            </div>
+          )}
           {wards.map((ward) => {
             const stats = getWardStats(ward);
             return (

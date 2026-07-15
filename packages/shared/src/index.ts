@@ -72,6 +72,7 @@ export interface Alert {
     patientId: string;
     name: string;
     icuBed: string;
+    ward?: string;
   };
   type: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
