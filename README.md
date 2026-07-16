@@ -194,7 +194,9 @@ the frontend only hides nav items.
 3. On any failure it silently falls back to the mock MAP/HR/SpO2 formula
    (no SHAP), and the frontend labels the explanation "Heuristic estimate".
 4. A fresh `high`/`critical` level raises an Alert unless one is already
-   active for that patient.
+   active for that patient. When a patient recovers to `low`, the engine
+   auto-resolves their open alerts (sets `resolvedAt`, no `resolvedBy`), so
+   the alert stream tracks reality and the next crossing raises a fresh one.
 
 The Training Sandbox follows the same flow on every slider change through
 `/patients/sandbox/predict`, with a badge showing whether the displayed score
