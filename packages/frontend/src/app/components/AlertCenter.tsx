@@ -1,4 +1,5 @@
 import { HeaderClock } from "./HeaderClock";
+import { CHART, AXIS_TICK, DarkTooltip, StatTile } from "./ChartKit";
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Bell, Clock, CheckCircle2, AlertTriangle, Search, Loader2 } from "lucide-react";
@@ -146,64 +147,56 @@ export function AlertCenter() {
 
         {/* Compact Stat Cards - Now a clean 3-column layout */}
         <div className="grid grid-cols-3 gap-6 mb-6">
-          <CompactStatCard 
-            title="Active Alerts" 
-            value={activeAlerts} 
-            icon={AlertTriangle} 
-            colorClass="text-[#e85d22]" 
-            bgClass="bg-[#e85d22]/10" 
+          <StatTile
+            label="Active Alerts"
+            value={activeAlerts}
+            icon={AlertTriangle}
+            accent={CHART.orange}
+            valueColor={activeAlerts > 0 ? CHART.orange : undefined}
           />
-          <CompactStatCard
-            title="Avg Response"
+          <StatTile
+            label="Avg Response"
             value={avgResponseTime === "—" ? "—" : `${avgResponseTime}m`}
-            icon={Clock} 
-            colorClass="text-[#f59e0b]" 
-            bgClass="bg-[#f59e0b]/10" 
+            icon={Clock}
+            accent={CHART.amber}
           />
-          <CompactStatCard 
-            title="Resolved Today" 
-            value={resolvedToday} 
-            icon={CheckCircle2} 
-            colorClass="text-[#3b82f6]" 
-            bgClass="bg-[#3b82f6]/10" 
+          <StatTile
+            label="Resolved Today"
+            value={resolvedToday}
+            icon={CheckCircle2}
+            accent={CHART.blue}
           />
         </div>
 
         {/* Full-width Trend Chart */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 mb-8 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-bold text-slate-900">Alert Volume Trend (24h)</h2>
-            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              <span className="w-2 h-2 rounded-full bg-[#0f172a]"></span> System Alerts
-            </span>
-          </div>
+          <h2 className="font-display text-lg font-bold text-slate-900 mb-6">Alert Volume Trend (24h)</h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <CartesianGrid vertical={false} stroke="#f1f5f9" />
                 <XAxis 
                   dataKey="hour" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }} 
+                  tick={AXIS_TICK} 
                   dy={10} 
                 />
                 <YAxis 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                  tick={AXIS_TICK} 
                 />
                 <Tooltip 
-                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '3 3' }} 
-                  contentStyle={{ borderRadius: '8px', fontSize: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }} 
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }} content={<DarkTooltip />} 
                 />
                 <Line 
                   type="monotone" 
                   dataKey="alerts" 
                   name="Alerts"
-                  stroke="#0f172a" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#0f172a', strokeWidth: 0 }} 
+                  stroke={CHART.blue} 
+                  strokeWidth={2} 
+                  dot={{ r: 4, fill: CHART.blue, strokeWidth: 2, stroke: '#ffffff' }} 
                   activeDot={{ r: 6, fill: '#3b82f6', strokeWidth: 0 }}
                 />
               </LineChart>
@@ -214,7 +207,7 @@ export function AlertCenter() {
         {/* Alert Table */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-            <h2 className="text-base font-bold text-slate-900">Active & Recent Alerts</h2>
+            <h2 className="font-display text-base font-bold text-slate-900">Active & Recent Alerts</h2>
             <div className="flex gap-2">
               <select
                 value={wardFilter}
@@ -270,7 +263,7 @@ export function AlertCenter() {
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                         alert.severity === 'critical' ? 'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20' :
-                        alert.severity === 'high' || alert.severity === 'medium' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                        alert.severity === 'high' || alert.severity === 'medium' ? 'bg-[#e2a80d]/10 text-[#d97706] border border-[#e2a80d]/30' :
                         'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20'
                       }`}>
                         {alert.severity}
@@ -281,7 +274,7 @@ export function AlertCenter() {
                       <div className="flex items-center gap-1.5">
                         <span className={`w-2 h-2 rounded-full ${
                           alert.status === 'active' ? 'bg-[#e85d22] animate-pulse' :
-                          alert.status === 'acknowledged' ? 'bg-[#f59e0b]' : 'bg-[#3b82f6]'
+                          alert.status === 'acknowledged' ? 'bg-[#e2a80d]' : 'bg-[#3b82f6]'
                         }`}></span>
                         <span className="text-slate-700 text-sm font-bold uppercase">{alert.status}</span>
                       </div>
@@ -307,7 +300,7 @@ export function AlertCenter() {
                           <button
                             onClick={() => handleResolve(alert._id)}
                             disabled={busyId === alert._id}
-                            className="px-3 py-1.5 bg-[#f59e0b] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm disabled:opacity-50"
+                            className="px-3 py-1.5 bg-[#e2a80d] text-white rounded-lg text-xs font-bold hover:bg-[#d97706] transition-all shadow-sm disabled:opacity-50"
                           >
                             Resolve
                           </button>
@@ -326,16 +319,3 @@ export function AlertCenter() {
 }
 
 // Compact Stat Card
-function CompactStatCard({ title, value, icon: Icon, colorClass, bgClass }: any) {
-  return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all hover:shadow-md flex items-center justify-between">
-      <div>
-        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</p>
-        <p className={`text-4xl font-bold ${colorClass} leading-none`}>{value}</p>
-      </div>
-      <div className={`w-14 h-14 rounded-full ${bgClass} flex items-center justify-center shrink-0`}>
-        <Icon className={`w-7 h-7 ${colorClass}`} />
-      </div>
-    </div>
-  );
-}

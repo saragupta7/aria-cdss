@@ -85,7 +85,10 @@ router.get('/', async (req, res) => {
     try {
       const patients = await Patient
         .find({ isActive: true })
-        .select('-vitals -mimicHistory') // mimicHistory is the unrevealed future trajectory — server-side only
+        // mimicHistory is the unrevealed future trajectory — server-side only.
+        // vitals: only the latest reading, so list views can show live numbers
+        // without shipping each patient's full history.
+        .select({ mimicHistory: 0, vitals: { $slice: -1 } })
         .sort({ riskScore: -1 });
       res.json({
         count: patients.length,

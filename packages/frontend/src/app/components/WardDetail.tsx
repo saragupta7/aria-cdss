@@ -1,4 +1,5 @@
 import { HeaderClock } from "./HeaderClock";
+import { CHART, StatTile } from "./ChartKit";
 import { useParams, Link, useNavigate } from "react-router";
 import { ArrowLeft, AlertTriangle, Search, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -128,7 +129,7 @@ export function WardDetail() {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold text-2xl shadow-sm">
+            <div className="h-14 min-w-[3.5rem] px-3 rounded-xl bg-slate-900 flex items-center justify-center text-white font-tele font-bold text-sm tracking-wide shadow-sm whitespace-nowrap">
               {wardId}
             </div>
             <div>
@@ -141,10 +142,15 @@ export function WardDetail() {
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-6 mb-8">
-          <CompactStatCard title="Total Patients" value={wardPatients.length} colorClass="text-slate-800" />
-          <CompactStatCard title="Stable" value={stableCount} colorClass="text-[#3b82f6]" />
-          <CompactStatCard title="Moderate" value={moderateCount} colorClass="text-[#f59e0b]" />
-          <CompactStatCard title="Critical" value={criticalCount} colorClass="text-[#e85d22]" />
+          <StatTile label="Total Patients" value={wardPatients.length} accent="#64748b" />
+          <StatTile label="Stable" value={stableCount} accent={CHART.blue} />
+          <StatTile label="Moderate" value={moderateCount} accent={CHART.amber} />
+          <StatTile
+            label="Critical"
+            value={criticalCount}
+            accent={CHART.orange}
+            valueColor={criticalCount > 0 ? CHART.orange : undefined}
+          />
         </div>
 
         {/* Patient List */}
@@ -169,7 +175,7 @@ export function WardDetail() {
                   className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
                     riskFilter === f
                       ? f === 'STABLE' ? 'bg-[#3b82f6] text-white shadow-sm'
-                        : f === 'MODERATE' ? 'bg-[#f59e0b] text-white shadow-sm'
+                        : f === 'MODERATE' ? 'bg-[#e2a80d] text-white shadow-sm'
                         : f === 'CRITICAL' ? 'bg-[#e85d22] text-white shadow-sm'
                         : 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-500 hover:text-slate-800'
@@ -229,14 +235,14 @@ export function WardDetail() {
                       <td className="px-6 py-4 font-bold text-slate-900">{patient.latestVitals.spO2}%</td>
                       <td className="px-6 py-4">
                         <span className={`font-bold ${
-                          patient.displayRiskLevel === 'STABLE' ? 'text-[#3b82f6]' : patient.displayRiskLevel === 'MODERATE' ? 'text-[#f59e0b]' : 'text-[#e85d22]'
+                          patient.displayRiskLevel === 'STABLE' ? 'text-[#3b82f6]' : patient.displayRiskLevel === 'MODERATE' ? 'text-[#e2a80d]' : 'text-[#e85d22]'
                         }`}>{patient.displayRiskScore}%</span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1 items-start">
                           <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
                             patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6]' :
-                            patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706]' :
+                            patient.displayRiskLevel === 'MODERATE' ? 'bg-[#e2a80d]/10 text-[#d97706]' :
                             'bg-[#e85d22]/10 text-[#e85d22]'
                           }`}>
                             {patient.displayRiskLevel}
@@ -261,11 +267,3 @@ export function WardDetail() {
 }
 
 // Clean text-only stat card for the Ward Header
-function CompactStatCard({ title, value, colorClass }: any) {
-  return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">{title}</p>
-      <p className={`text-4xl font-bold ${colorClass}`}>{value}</p>
-    </div>
-  );
-}

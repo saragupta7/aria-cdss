@@ -1,4 +1,5 @@
 import { HeaderClock } from "./HeaderClock";
+import { CHART, StatTile } from "./ChartKit";
 import { useEffect, useMemo, useState } from "react";
 import { FileText, Search, Download, ShieldCheck, Activity, Users, AlertTriangle, Loader2 } from "lucide-react";
 import { adminApi, type AuditLogEntry } from "../../api/admin";
@@ -138,10 +139,10 @@ export function AuditTrail() {
         </div>
 
         <div className="grid grid-cols-4 gap-4 mb-8">
-          <CompactStatCard title="Total Logs" value={stats.total} icon={FileText} colorClass="text-slate-800" bgClass="bg-slate-100" />
-          <CompactStatCard title="Alert Events" value={stats.alerts} icon={AlertTriangle} colorClass="text-[#f59e0b]" bgClass="bg-[#f59e0b]/10" />
-          <CompactStatCard title="Clinical Actions" value={stats.clinical} icon={Users} colorClass="text-[#3b82f6]" bgClass="bg-[#3b82f6]/10" />
-          <CompactStatCard title="Auth Events" value={stats.auth} icon={Activity} colorClass="text-slate-500" bgClass="bg-slate-200/50" />
+          <StatTile label="Total Logs" value={stats.total} icon={FileText} accent="#64748b" />
+          <StatTile label="Alert Events" value={stats.alerts} icon={AlertTriangle} accent={CHART.amber} />
+          <StatTile label="Clinical Actions" value={stats.clinical} icon={Users} accent={CHART.blue} />
+          <StatTile label="Auth Events" value={stats.auth} icon={Activity} accent="#64748b" />
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -198,16 +199,3 @@ export function AuditTrail() {
   );
 }
 
-function CompactStatCard({ title, value, icon: Icon, colorClass, bgClass }: any) {
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center gap-4 hover:shadow-md transition-shadow">
-      <div className={`w-12 h-12 rounded-xl ${bgClass} flex items-center justify-center shrink-0`}>
-        <Icon className={`w-6 h-6 ${colorClass}`} />
-      </div>
-      <div>
-        <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-0.5">{title}</p>
-        <p className={`text-2xl font-bold ${colorClass} leading-none`}>{value}</p>
-      </div>
-    </div>
-  );
-}

@@ -11,7 +11,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  LabelList,
 } from "recharts";
+import { CHART, AXIS_TICK, DarkTooltip, StatTile, ChartCard, LegendChip } from "./ChartKit";
 import {
   BarChart3,
   AlertTriangle,
@@ -25,11 +27,11 @@ import { patientsApi } from "../../api/patients";
 import { alertsApi } from "../../api/alerts";
 import type { Patient, Alert } from "@aria/shared";
 
+// Chart marks use the validated ChartKit palette.
 const COLORS = {
-  primary: "#3B82F6",
-  warning: "#F59E0B",
-  critical: "#EA5B1F",
-  navy: "#0F2F56",
+  primary: CHART.blue,
+  warning: CHART.amber,
+  critical: CHART.orange,
 };
 
 export function AdminAnalytics() {
@@ -100,8 +102,8 @@ export function AdminAnalytics() {
       map[p.ward] = (map[p.ward] || 0) + 1;
     });
     return Object.entries(map)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([ward, count]) => ({ ward: `Ward ${ward}`, count }));
+      .sort(([, a], [, b]) => b - a)
+      .map(([ward, count]) => ({ ward, count }));
   }, [patients]);
 
   const kpis = useMemo(() => {
@@ -158,63 +160,88 @@ export function AdminAnalytics() {
 
         {/* KPI CARDS */}
         <div className="grid grid-cols-6 gap-4 mb-8">
-          <StatCard title="Total Patients" value={String(kpis.totalPatients)} icon={Users} />
-          <StatCard title="Critical / High" value={String(kpis.criticalPatients)} icon={AlertTriangle} />
-          <StatCard title="Total Alerts" value={String(kpis.totalAlerts)} icon={Activity} />
-          <StatCard title="Active Alerts" value={String(kpis.activeAlerts)} icon={AlertTriangle} />
-          <StatCard title="Avg ACK Time" value={kpis.avgAck} icon={Clock} />
-          <StatCard title="Resolution Rate" value={kpis.resolutionRate} icon={CheckCircle2} />
+          <StatTile label="Total Patients" value={kpis.totalPatients} icon={Users} />
+          <StatTile label="Critical / High" value={kpis.criticalPatients} icon={AlertTriangle} accent={CHART.orange} valueColor={kpis.criticalPatients > 0 ? CHART.orange : undefined} />
+          <StatTile label="Total Alerts" value={kpis.totalAlerts} icon={Activity} />
+          <StatTile label="Active Alerts" value={kpis.activeAlerts} icon={AlertTriangle} accent={CHART.amber} />
+          <StatTile label="Avg ACK Time" value={kpis.avgAck} icon={Clock} />
+          <StatTile label="Resolution Rate" value={kpis.resolutionRate} icon={CheckCircle2} />
         </div>
 
         {/* TOP ROW */}
         <div className="grid grid-cols-2 gap-6 mb-6">
-          <Card title="Risk Score Distribution">
+          <ChartCard
+            title="Risk Score Distribution"
+            right={
+              <div className="flex items-center gap-4">
+                <LegendChip color={CHART.blue}>&lt; 70%</LegendChip>
+                <LegendChip color={CHART.orange}>critical zone</LegendChip>
+              </div>
+            }
+          >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={riskData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                  <YAxis axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill={COLORS.primary} radius={[6, 6, 0, 0]} />
+                <BarChart data={riskData} margin={{ top: 10, right: 0, left: -28, bottom: 0 }}>
+                  <CartesianGrid vertical={false} stroke={CHART.grid} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={AXIS_TICK} dy={8} />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                    tick={AXIS_TICK}
+                    domain={[0, (dataMax: number) => Math.max(5, Math.ceil(dataMax / 10) * 10)]}
+                    tickCount={5}
+                  />
+                  <Tooltip cursor={{ fill: "#f8fafc" }} content={<DarkTooltip />} />
+                  <Bar dataKey="count" name="Patients" radius={[4, 4, 0, 0]} maxBarSize={24}>
+                    {riskData.map((bucket, i) => (
+                      <Cell key={i} fill={i >= 7 ? CHART.orange : CHART.blue} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </Card>
+          </ChartCard>
 
-          <Card title="Alert Status">
+          <ChartCard title="Alert Status">
             {alerts.length === 0 ? (
               <div className="h-72 flex items-center justify-center text-slate-400 font-medium">No alerts recorded yet</div>
             ) : (
               <>
-                <div className="h-72 flex items-center justify-center">
+                <div className="h-64 relative">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={alertStatus} dataKey="raw" innerRadius={70} outerRadius={100} paddingAngle={4}>
+                      <Pie data={alertStatus} dataKey="raw" nameKey="name" innerRadius={82} outerRadius={100} paddingAngle={2} stroke="#ffffff" strokeWidth={2}>
                         {alertStatus.map((entry, index) => (
                           <Cell key={index} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip content={<DarkTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="font-display text-3xl font-bold text-slate-900 leading-none">{alerts.length}</span>
+                    <span className="font-tele text-[9px] tracking-widest text-slate-400 uppercase mt-1">total alerts</span>
+                  </div>
                 </div>
-                <div className="flex justify-center gap-6 mt-2 text-sm font-medium">
+                <div className="flex justify-center gap-6 mt-4">
                   {alertStatus.map((item) => (
                     <div key={item.name} className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                      {item.name} {item.raw} ({item.value}%)
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                      <span className="text-xs font-bold text-slate-600">{item.name}</span>
+                      <span className="font-tele text-xs text-slate-900 font-bold">{item.raw}</span>
+                      <span className="font-tele text-[10px] text-slate-400">({item.value}%)</span>
                     </div>
                   ))}
                 </div>
               </>
             )}
-          </Card>
+          </ChartCard>
         </div>
 
         {/* SECOND ROW */}
         <div className="grid grid-cols-2 gap-6">
-          <Card title="Avg Response Time by Role (min)">
+          <ChartCard title="Avg Response Time by Role (min)">
             {responseData.length === 0 ? (
               <div className="h-72 flex items-center justify-center text-slate-400 font-medium">
                 No acknowledged alerts yet
@@ -222,56 +249,38 @@ export function AdminAnalytics() {
             ) : (
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart layout="vertical" data={responseData}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                    <XAxis type="number" />
-                    <YAxis type="category" dataKey="role" width={110} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Bar dataKey="time" fill={COLORS.navy} radius={[0, 6, 6, 0]} />
+                  <BarChart layout="vertical" data={responseData} margin={{ top: 4, right: 44, left: 8, bottom: 0 }}>
+                    <CartesianGrid horizontal={false} stroke={CHART.grid} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={AXIS_TICK} />
+                    <YAxis type="category" dataKey="role" width={110} axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12, fontWeight: 600 }} />
+                    <Tooltip cursor={{ fill: "#f8fafc" }} content={<DarkTooltip />} />
+                    <Bar dataKey="time" name="Minutes" fill={CHART.blue} radius={[0, 4, 4, 0]} maxBarSize={20}>
+                      <LabelList dataKey="time" position="right" style={{ fill: "#64748b", fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
-          </Card>
+          </ChartCard>
 
-          <Card title="Ward Census">
+          <ChartCard title="Ward Census">
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={wardCensus}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="ward" axisLine={false} tickLine={false} />
-                  <YAxis axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill={COLORS.warning} radius={[6, 6, 0, 0]} />
+                <BarChart layout="vertical" data={wardCensus} margin={{ top: 4, right: 36, left: 8, bottom: 0 }}>
+                  <CartesianGrid horizontal={false} stroke={CHART.grid} />
+                  <XAxis type="number" axisLine={false} tickLine={false} allowDecimals={false} tick={AXIS_TICK} />
+                  <YAxis type="category" dataKey="ward" width={96} axisLine={false} tickLine={false} tick={{ fill: "#64748b", fontSize: 12, fontWeight: 600 }} />
+                  <Tooltip cursor={{ fill: "#f8fafc" }} content={<DarkTooltip />} />
+                  <Bar dataKey="count" name="Patients" fill={CHART.blue} radius={[0, 4, 4, 0]} maxBarSize={20}>
+                    <LabelList dataKey="count" position="right" style={{ fill: "#64748b", fontSize: 11, fontFamily: "'JetBrains Mono', monospace" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </Card>
+          </ChartCard>
         </div>
       </div>
     </div>
   );
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-md">
-      <h2 className="text-lg font-bold text-slate-900 mb-6">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-function StatCard({ title, value, icon: Icon }: { title: string; value: string; icon: any }) {
-  return (
-    <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-md">
-      <div className="flex justify-between items-start">
-        <div>
-          <p className="text-[11px] uppercase tracking-wider text-slate-500 font-bold">{title}</p>
-          <p className="text-2xl font-bold text-slate-900 mt-1">{value}</p>
-        </div>
-        <Icon className="w-5 h-5 text-slate-500" />
-      </div>
-    </div>
-  );
-}

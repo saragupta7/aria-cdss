@@ -132,7 +132,7 @@ const LINE = "#1c3252";
 const TRACE = "#2dd4bf";
 const CYAN = "#38bdf8";
 const ALERT = "#e85d22";
-const AMBER = "#f59e0b";
+const AMBER = "#e2a80d";
 
 /* ---------- tiny hooks ---------- */
 

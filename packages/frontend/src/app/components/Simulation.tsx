@@ -1,7 +1,7 @@
 import { HeaderClock } from "./HeaderClock";
 import { useState, useEffect } from "react";
 import { FlaskConical, RefreshCcw, Check, BrainCircuit, Calculator } from "lucide-react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import api from "../../api/client";
 
 interface SavedScenario {
@@ -76,7 +76,7 @@ export function Simulation() {
     ? (prediction.riskLevel === 'critical' || prediction.riskLevel === 'high' ? 'CRITICAL'
       : prediction.riskLevel === 'medium' ? 'MODERATE' : 'STABLE')
     : riskScore >= 75 ? 'CRITICAL' : riskScore >= 50 ? 'MODERATE' : 'STABLE';
-  const riskColor = riskScore >= 75 ? '#e85d22' : riskScore >= 50 ? '#f59e0b' : '#3b82f6';
+  const riskColor = riskScore >= 75 ? '#e85d22' : riskScore >= 50 ? '#e2a80d' : '#3b82f6';
   
   const pieData = [
     { name: 'Risk', value: riskScore, color: riskColor },
@@ -136,7 +136,7 @@ export function Simulation() {
           {/* Left Column: Parameter Inputs */}
           <div className="col-span-6 bg-white rounded-3xl p-8 shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
-              <h2 className="text-lg font-bold text-slate-900">Patient Parameters</h2>
+              <h2 className="font-display text-lg font-bold text-slate-900">Patient Parameters</h2>
               <button onClick={resetSim} className="text-slate-500 hover:text-slate-900 flex items-center gap-2 text-sm font-bold transition-colors bg-slate-50 px-4 py-2 rounded-lg">
                 <RefreshCcw className="w-4 h-4" /> Reset
               </button>
@@ -185,36 +185,37 @@ export function Simulation() {
                   <PieChart>
                     <Pie
                       data={pieData}
-                      innerRadius={75}
+                      innerRadius={80}
                       outerRadius={100}
                       startAngle={90}
                       endAngle={-270}
                       dataKey="value"
-                      stroke="none"
+                      stroke="#ffffff"
+                      strokeWidth={2}
                       animationDuration={500}
                     >
                       {pieData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-5xl font-bold" style={{ color: riskColor }}>{riskScore}%</span>
+                  <span className="font-display text-5xl font-bold tracking-tight" style={{ color: riskColor }}>{riskScore}%</span>
+                  <span className="font-tele text-[9px] tracking-widest text-slate-400 uppercase mt-1.5">instability risk</span>
                 </div>
               </div>
 
               <div className={`px-6 py-2 rounded-full text-sm font-bold uppercase tracking-wider mb-4 border ${
                 riskLevel === 'CRITICAL' ? 'bg-[#e85d22]/10 text-[#e85d22] border-[#e85d22]/20' : 
-                riskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border-[#f59e0b]/30' : 
+                riskLevel === 'MODERATE' ? 'bg-[#e2a80d]/10 text-[#d97706] border-[#e2a80d]/30' : 
                 'bg-[#3b82f6]/10 text-[#3b82f6] border-[#3b82f6]/20'
               }`}>
                 {riskLevel === 'CRITICAL' ? 'HIGH RISK' : riskLevel === 'MODERATE' ? 'MODERATE RISK' : 'LOW RISK'}
               </div>
 
               {riskLevel !== 'STABLE' && (
-                <div className="bg-[#f59e0b]/10 text-[#d97706] px-6 py-2 rounded-lg text-sm font-bold border border-[#f59e0b]/20">
+                <div className="bg-[#e2a80d]/10 text-[#d97706] px-6 py-2 rounded-lg text-sm font-bold border border-[#e2a80d]/20">
                   Predicted instability in {(100 - riskScore) / 10 + 1.2}h
                 </div>
               )}
@@ -223,7 +224,7 @@ export function Simulation() {
             {/* Clinical Recommendation Box */}
             <div className={`rounded-2xl p-6 border-2 bg-white ${
               riskLevel === 'CRITICAL' ? 'border-[#e85d22]' : 
-              riskLevel === 'MODERATE' ? 'border-[#f59e0b]' : 
+              riskLevel === 'MODERATE' ? 'border-[#e2a80d]' : 
               'border-[#3b82f6]'
             }`}>
               <h3 className={`font-bold mb-2 uppercase tracking-wider ${
@@ -279,7 +280,7 @@ export function Simulation() {
                       </span>
                       <span
                         className="font-bold"
-                        style={{ color: s.riskLevel === 'CRITICAL' ? '#e85d22' : s.riskLevel === 'MODERATE' ? '#f59e0b' : '#3b82f6' }}
+                        style={{ color: s.riskLevel === 'CRITICAL' ? '#e85d22' : s.riskLevel === 'MODERATE' ? '#e2a80d' : '#3b82f6' }}
                       >
                         {s.riskScore}%
                       </span>

@@ -11,7 +11,7 @@
   --aria-trace: #2dd4bf;      /* ECG monitor teal     */
   --aria-cyan: #38bdf8;       /* SpO2 / brand cyan    */
   --aria-alert: #e85d22;      /* alarm orange (alerts only) */
-  --aria-amber: #f59e0b;      /* caution              */
+  --aria-amber: #e2a80d;      /* caution              */
 }
 
 .font-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
@@ -61,7 +61,7 @@ input[type="range"].aria-slider {
   appearance: none;
   height: 6px;
   border-radius: 999px;
-  background: linear-gradient(90deg, #2dd4bf, #f59e0b 55%, #e85d22);
+  background: linear-gradient(90deg, #2dd4bf, #e2a80d 55%, #e85d22);
   outline: none;
 }
 input[type="range"].aria-slider::-webkit-slider-thumb {

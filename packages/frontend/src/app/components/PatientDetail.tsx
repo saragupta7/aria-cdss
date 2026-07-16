@@ -1,3 +1,4 @@
+import { AXIS_TICK, DarkTooltip } from "./ChartKit";
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import { ArrowLeft, TrendingDown, TrendingUp, AlertTriangle, FileText, BrainCircuit, HeartPulse, Wind, Droplets, Loader2, CheckCircle2 } from "lucide-react";
@@ -131,10 +132,10 @@ export function PatientDetail() {
         return {
           time: `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`,
           map,
-          hr: v.heartRate || 0,
+          hr: Math.round(v.heartRate || 0),
           lactate: v.lactate || 0,
-          spo2: v.oxygenSaturation || 0,
-          rr: v.respiratoryRate || 0,
+          spo2: Math.round(v.oxygenSaturation || 0),
+          rr: Math.round(v.respiratoryRate || 0),
           sbp,
           dbp,
           creatinine: v.creatinine || 1.1 // fallback
@@ -214,12 +215,12 @@ export function PatientDetail() {
                 <h1 className="font-display text-2xl font-bold text-slate-900 tracking-tight">{patient.name}</h1>
                 <span className={`inline-flex items-center px-3 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
                   displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                  displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                  displayRiskLevel === 'MODERATE' ? 'bg-[#e2a80d]/10 text-[#d97706] border border-[#e2a80d]/30' :
                   'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
                 }`}>
                   <span className={`w-2 h-2 rounded-sm mr-2 ${
                     displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                    displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                    displayRiskLevel === 'MODERATE' ? 'bg-[#e2a80d]' :
                     'bg-[#e85d22] animate-pulse'
                   }`}></span>
                   {displayRiskLevel}
@@ -303,7 +304,7 @@ export function PatientDetail() {
                   <div className="flex items-baseline gap-3">
                     <p className={`text-5xl font-bold leading-none ${
                       displayRiskScore >= 75 ? 'text-[#e85d22]' :
-                      displayRiskScore >= 50 ? 'text-[#f59e0b]' :
+                      displayRiskScore >= 50 ? 'text-[#e2a80d]' :
                       'text-[#3b82f6]'
                     }`}>{displayRiskScore}%</p>
                     <p className="text-slate-400 font-medium text-sm">instability probability</p>
@@ -311,10 +312,10 @@ export function PatientDetail() {
                 </div>
                 
                 {patient.riskLevel === 'high' || patient.riskLevel === 'critical' ? (
-                  <div className="bg-[#f59e0b]/5 rounded-2xl p-6 shadow-sm border border-[#f59e0b]/20 flex flex-col justify-center">
+                  <div className="bg-[#e2a80d]/5 rounded-2xl p-6 shadow-sm border border-[#e2a80d]/20 flex flex-col justify-center">
                     <p className="text-[#d97706] text-xs font-bold uppercase tracking-wider mb-2">Estimated Lead Time</p>
                     <div className="flex items-baseline gap-3">
-                      <p className="text-5xl font-bold text-[#f59e0b] leading-none">{patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}</p>
+                      <p className="text-5xl font-bold text-[#e2a80d] leading-none">{patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}</p>
                       <p className="text-[#d97706]/70 font-medium text-sm">until critical event</p>
                     </div>
                   </div>
@@ -328,7 +329,7 @@ export function PatientDetail() {
 
               <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-slate-900 font-bold text-lg">MAP & HR Trend (12h)</h3>
+                  <h3 className="font-display text-slate-900 font-bold text-lg">MAP & HR Trend</h3>
                   <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#0f172a]"></span> MAP</span>
                     <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-[#60a5fa]"></span> Heart Rate</span>
@@ -337,14 +338,13 @@ export function PatientDetail() {
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={vitalsData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={10} />
-                      <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[40, 120]} />
-                      <YAxis yAxisId="right" orientation="right" hide domain={[40, 120]} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} />
-                      <ReferenceLine y={65} yAxisId="left" stroke="#e85d22" strokeDasharray="5 5" strokeOpacity={0.8} />
-                      <Line yAxisId="left" type="monotone" dataKey="map" name="MAP" stroke="#0f172a" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} />
-                      <Line yAxisId="right" type="monotone" dataKey="hr" name="Heart Rate" stroke="#60a5fa" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} />
+                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={AXIS_TICK} dy={10} minTickGap={24} />
+                      <YAxis axisLine={false} tickLine={false} tick={AXIS_TICK} domain={[40, 'auto']} allowDecimals={false} />
+                      <Tooltip content={<DarkTooltip />} />
+                      <ReferenceLine y={65} stroke="#e85d22" strokeDasharray="5 5" strokeOpacity={0.8} />
+                      <Line type="monotone" dataKey="map" name="MAP" stroke="#0f172a" strokeWidth={2} dot={{ r: 4, strokeWidth: 2, stroke: '#ffffff', fill: '#0f172a' }} />
+                      <Line type="monotone" dataKey="hr" name="Heart Rate" stroke="#60a5fa" strokeWidth={2} dot={{ r: 4, strokeWidth: 2, stroke: '#ffffff', fill: '#60a5fa' }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -358,7 +358,7 @@ export function PatientDetail() {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
               <h2 className="text-base font-bold text-slate-900">ICU Vitals Flowsheet</h2>
-              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Past 12 Hours</p>
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Recent readings</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -382,7 +382,7 @@ export function PatientDetail() {
                   <tr className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 border-b border-slate-100 border-r text-slate-700 font-bold bg-slate-50/30">Heart Rate (bpm)</td>
                     {vitalsData.map((d, i) => (
-                      <td key={i} className={`px-4 py-4 border-b border-slate-100 text-center font-bold ${d.hr > 100 ? 'text-[#f59e0b]' : 'text-slate-900'}`}>{d.hr}</td>
+                      <td key={i} className={`px-4 py-4 border-b border-slate-100 text-center font-bold ${d.hr > 100 ? 'text-[#e2a80d]' : 'text-slate-900'}`}>{d.hr}</td>
                     ))}
                   </tr>
                   {/* SpO2 Row */}
@@ -431,14 +431,13 @@ export function PatientDetail() {
                 <div className="h-72">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={vitalsData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={10} />
-                      <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[40, 120]} />
-                      <YAxis yAxisId="right" orientation="right" hide domain={[40, 120]} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} />
-                      <ReferenceLine y={65} yAxisId="left" stroke="#e85d22" strokeDasharray="5 5" strokeOpacity={0.8} />
-                      <Line yAxisId="left" type="monotone" dataKey="map" name="MAP" stroke="#0f172a" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} />
-                      <Line yAxisId="right" type="monotone" dataKey="hr" name="Heart Rate" stroke="#60a5fa" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff' }} />
+                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={AXIS_TICK} dy={10} minTickGap={24} />
+                      <YAxis axisLine={false} tickLine={false} tick={AXIS_TICK} domain={[40, 'auto']} allowDecimals={false} />
+                      <Tooltip content={<DarkTooltip />} />
+                      <ReferenceLine y={65} stroke="#e85d22" strokeDasharray="5 5" strokeOpacity={0.8} />
+                      <Line type="monotone" dataKey="map" name="MAP" stroke="#0f172a" strokeWidth={2} dot={{ r: 4, strokeWidth: 2, stroke: '#ffffff', fill: '#0f172a' }} />
+                      <Line type="monotone" dataKey="hr" name="Heart Rate" stroke="#60a5fa" strokeWidth={2} dot={{ r: 4, strokeWidth: 2, stroke: '#ffffff', fill: '#60a5fa' }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -460,11 +459,11 @@ export function PatientDetail() {
                           <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[85, 100]} />
-                      <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} />
-                      <ReferenceLine y={92} stroke="#f59e0b" strokeDasharray="5 5" strokeOpacity={0.8} />
+                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={AXIS_TICK} dy={10} minTickGap={24} />
+                      <YAxis axisLine={false} tickLine={false} tick={AXIS_TICK} domain={[85, 100]} />
+                      <Tooltip content={<DarkTooltip />} />
+                      <ReferenceLine y={92} stroke="#e2a80d" strokeDasharray="5 5" strokeOpacity={0.8} />
                       <Area type="monotone" dataKey="spo2" name="SpO2 %" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorSpo2)" />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -483,14 +482,14 @@ export function PatientDetail() {
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={vitalsData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                      <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }} />
+                      <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="time" axisLine={false} tickLine={false} tick={AXIS_TICK} dy={10} minTickGap={24} />
+                      <YAxis axisLine={false} tickLine={false} tick={AXIS_TICK} />
+                      <Tooltip cursor={{fill: '#f8fafc'}} content={<DarkTooltip />} />
                       <ReferenceLine y={2.0} stroke="#e85d22" strokeDasharray="5 5" strokeOpacity={0.8} />
-                      <Bar dataKey="lactate" name="Lactate" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={24}>
+                      <Bar dataKey="lactate" name="Lactate" fill="#e2a80d" radius={[4, 4, 0, 0]} barSize={24}>
                         {vitalsData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.lactate > 2.0 ? '#e85d22' : '#f59e0b'} />
+                          <Cell key={`cell-${index}`} fill={entry.lactate > 2.0 ? '#e85d22' : '#e2a80d'} />
                         ))}
                       </Bar>
                     </BarChart>
@@ -545,10 +544,10 @@ export function PatientDetail() {
               <div className="flex-1 min-h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={shapData} layout="vertical" margin={{ top: 0, right: 20, left: 40, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#f1f5f9" />
+                    <CartesianGrid horizontal={true} vertical={false} stroke="#f1f5f9" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="feature" type="category" axisLine={false} tickLine={false} tick={{ fill: '#0f172a', fontSize: 12, fontWeight: 700 }} />
-                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} content={<DarkTooltip />} />
                     <Bar dataKey="impact" name="Risk Impact %" fill="#e85d22" radius={[0, 4, 4, 0]} barSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -596,14 +595,14 @@ export function PatientDetail() {
                         alert.status === 'active' && isCrit ? 'border-[#e85d22]/30 bg-[#e85d22]/5' : 'border-slate-200'
                       }`}
                     >
-                      <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${isCrit ? 'text-[#e85d22]' : 'text-[#f59e0b]'}`} />
+                      <AlertTriangle className={`w-5 h-5 shrink-0 mt-0.5 ${isCrit ? 'text-[#e85d22]' : 'text-[#e2a80d]'}`} />
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
                           <p className="font-bold text-slate-900">{(alert.type || 'alert').replace(/_/g, ' ')}</p>
                           <span
                             className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
                               alert.status === 'active' ? 'bg-[#e85d22] text-white' :
-                              alert.status === 'acknowledged' ? 'bg-[#f59e0b]/20 text-[#d97706]' :
+                              alert.status === 'acknowledged' ? 'bg-[#e2a80d]/20 text-[#d97706]' :
                               'bg-slate-100 text-slate-500'
                             }`}
                           >

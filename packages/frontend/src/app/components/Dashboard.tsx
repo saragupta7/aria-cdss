@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Search, Activity, AlertCircle, Droplet, ArrowRight } from "lucide-react";
+import { CHART, AXIS_TICK, DarkTooltip, StatTile, ChartCard } from "./ChartKit";
 import { patientsApi } from "../../api/patients";
 import { HeaderClock } from "./HeaderClock";
 import { alertsApi } from "../../api/alerts";
@@ -90,11 +91,11 @@ export function Dashboard() {
   const totalPatients = patients.length;
   const activeMapAlerts = alerts.filter(a => a.status === 'active').length;
 
-  // Updated Palette
+  // Chart palette (see ChartKit — gold replaces amber for chart marks)
   const COLORS = {
-    stable: '#3b82f6',   // Clinical Blue
-    moderate: '#f59e0b', // Warning Amber
-    critical: '#e85d22'  // Critical Orange
+    stable: CHART.blue,
+    moderate: CHART.amber,
+    critical: CHART.orange
   };
 
   // Data for the Donut Chart
@@ -164,31 +165,29 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Top Row: Clean, Minimalist Highlight Cards */}
+      {/* Top Row: Stat tiles */}
       <div className="grid grid-cols-3 gap-6 mb-6">
-        <HighlightCard 
-          title="Critical Risk" 
-          value={criticalCount} 
-          subtitle="Active Patients" 
-          icon={Droplet} 
-          accentColor="text-[#e85d22]" 
-          bgAccent="bg-[#e85d22]/10" 
+        <StatTile
+          label="Critical Risk"
+          value={criticalCount}
+          sub="Active patients"
+          icon={Droplet}
+          accent={CHART.orange}
+          valueColor={CHART.orange}
         />
-        <HighlightCard
-          title="Active Alerts"
+        <StatTile
+          label="Active Alerts"
           value={activeMapAlerts}
-          subtitle="Requires Attention"
-          icon={AlertCircle} 
-          accentColor="text-[#f59e0b]" 
-          bgAccent="bg-[#f59e0b]/10" 
+          sub="Requires attention"
+          icon={AlertCircle}
+          accent={CHART.amber}
         />
-        <HighlightCard 
-          title="Moderate Risk" 
-          value={moderateCount} 
-          subtitle="Patients Monitored" 
-          icon={Activity} 
-          accentColor="text-[#3b82f6]" 
-          bgAccent="bg-[#3b82f6]/10" 
+        <StatTile
+          label="Moderate Risk"
+          value={moderateCount}
+          sub="Patients monitored"
+          icon={Activity}
+          accent={CHART.blue}
         />
       </div>
 
@@ -197,28 +196,30 @@ export function Dashboard() {
         
         {/* Graph 1: Acuity Breakdown */}
         <div className="col-span-4 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">Acuity Distribution</h2>
+          <h2 className="font-display text-lg font-bold text-slate-900 mb-4">Acuity Distribution</h2>
           <div className="flex items-center justify-between gap-4">
             <div className="w-[140px] h-[140px] relative shrink-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={acuityData}
-                    innerRadius={45}
-                    outerRadius={65}
-                    paddingAngle={3}
+                    innerRadius={52}
+                    outerRadius={66}
+                    paddingAngle={2}
                     dataKey="value"
-                    stroke="none"
+                    stroke="#ffffff"
+                    strokeWidth={2}
                   >
                     {acuityData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  <Tooltip content={<DarkTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-xl font-bold text-slate-800">{totalPatients}</span>
+                <span className="font-display text-2xl font-bold text-slate-900 leading-none">{totalPatients}</span>
+                <span className="font-tele text-[8px] tracking-widest text-slate-400 uppercase mt-1">patients</span>
               </div>
             </div>
             
@@ -243,33 +244,22 @@ export function Dashboard() {
 
         {/* Graph 2: Alert Volume Histogram */}
         <div className="col-span-5 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-slate-900">Alert Volume (12h)</h2>
-            <div className="flex gap-4 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-              {/* Legend updated to Clinical Blue */}
-              <span className="flex items-center gap-1"><span className="w-2 h-2 bg-[#3b82f6] rounded-sm"></span> Generated</span>
-            </div>
-          </div>
+          <h2 className="font-display text-lg font-bold text-slate-900 mb-4">Alert Volume (12h)</h2>
           <div className="flex-1 min-h-[160px]">
             <ResponsiveContainer width="100%" height="100%">
-              {/* barCategoryGap keeps bars close, but more data points makes them thinner natively */}
-              <BarChart data={alertTrendData} margin={{ top: 10, right: 0, left: -25, bottom: 0 }} barCategoryGap={2}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="time" 
-                  axisLine={false} 
-                  tickLine={false} 
-                  tick={{ fill: '#64748b', fontSize: 11, fontWeight: 500 }} 
-                  dy={10} 
-                  interval={1} // Only show every other label so they don't overlap
+              <BarChart data={alertTrendData} margin={{ top: 10, right: 0, left: -28, bottom: 0 }} barCategoryGap={2}>
+                <CartesianGrid vertical={false} stroke={CHART.grid} />
+                <XAxis
+                  dataKey="time"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={AXIS_TICK}
+                  dy={10}
+                  interval={1}
                 />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-                <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontSize: '12px', fontWeight: 'bold' }}
-                />
-                {/* Changed fill to Clinical Blue and added a maxBarSize just in case */}
-                <Bar dataKey="generated" name="Alerts Generated" fill="#3b82f6" radius={[2, 2, 0, 0]} maxBarSize={24} />
+                <YAxis axisLine={false} tickLine={false} tick={AXIS_TICK} allowDecimals={false} />
+                <Tooltip cursor={{ fill: '#f8fafc' }} content={<DarkTooltip />} />
+                <Bar dataKey="generated" name="Alerts" fill={CHART.blue} radius={[4, 4, 0, 0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -277,7 +267,7 @@ export function Dashboard() {
 
         {/* Clinical Activity Feed */}
         <div className="col-span-3 bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col">
-          <h2 className="text-lg font-bold text-slate-900 mb-4">Recent Activity</h2>
+          <h2 className="font-display text-lg font-bold text-slate-900 mb-4">Recent Activity</h2>
           <div className="flex-1 flex flex-col justify-between">
             {recentEvents.length === 0 && (
               <p className="text-sm text-slate-400 font-medium">No recent activity</p>
@@ -287,14 +277,14 @@ export function Dashboard() {
                 <div className="flex flex-col items-center">
                   <div className={`w-2 h-2 rounded-full mt-1.5 ${
                     event.type === 'critical' ? 'bg-[#e85d22]' : 
-                    event.type === 'moderate' ? 'bg-[#f59e0b]' : 'bg-[#3b82f6]'
+                    event.type === 'moderate' ? 'bg-[#e2a80d]' : 'bg-[#3b82f6]'
                   }`}></div>
                   {i !== recentEvents.length - 1 && <div className="w-px h-full bg-slate-100 my-1"></div>}
                 </div>
                 <div className="pb-3">
                   <p className="text-sm font-bold text-slate-800 leading-tight">{event.action}</p>
                   <p className="text-xs font-medium text-slate-500 mt-0.5">
-                    <span className="text-slate-700">{event.patient}</span> • {event.time}
+                    <span className="font-tele text-[11px] text-slate-700">{event.patient}</span> • {event.time}
                   </p>
                 </div>
               </div>
@@ -307,7 +297,7 @@ export function Dashboard() {
       {/* Ward Overview Section */}
       <div>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-slate-900">Ward Operations</h2>
+          <h2 className="font-display text-xl font-bold text-slate-900">Ward Health</h2>
           <Link
             to="/dashboard/wards"
             className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-all text-sm font-bold shadow-sm"
@@ -321,24 +311,6 @@ export function Dashboard() {
             <WardTile key={ward} ward={ward} patients={patients} />
           ))}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// Minimalist Highlight Card
-function HighlightCard({ title, value, subtitle, icon: Icon, accentColor, bgAccent }: any) {
-  return (
-    <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 transition-all hover:shadow-md flex items-center justify-between">
-      <div>
-        <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">{title}</p>
-        <div className="flex items-baseline gap-2">
-          <p className={`text-4xl font-bold ${accentColor}`}>{value}</p>
-        </div>
-        <p className="text-slate-400 text-sm font-medium mt-1">{subtitle}</p>
-      </div>
-      <div className={`w-14 h-14 rounded-full ${bgAccent} flex items-center justify-center`}>
-        <Icon className={`w-7 h-7 ${accentColor}`} />
       </div>
     </div>
   );
@@ -359,33 +331,30 @@ function WardTile({ ward, patients }: { ward: string; patients: DashboardPatient
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-bold text-sm shadow-sm">
+          <div className="h-10 min-w-[2.5rem] px-2.5 rounded-xl bg-slate-900 flex items-center justify-center text-white font-tele font-bold text-[11px] tracking-wide shadow-sm whitespace-nowrap">
             {ward}
           </div>
-          <div>
-            <h3 className="font-bold text-slate-900 leading-tight">Ward {ward}</h3>
-            <p className="text-xs text-slate-500 font-medium">{total} active patients</p>
-          </div>
+          <p className="text-xs text-slate-500 font-medium">{total} active patients</p>
         </div>
         <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-slate-600 group-hover:translate-x-0.5 transition-all" />
       </div>
 
-      {/* segmented acuity bar */}
-      <div className="flex h-2 rounded-full overflow-hidden bg-slate-100 mb-3">
-        {stable > 0 && <div style={{ width: pct(stable), background: '#3b82f6' }} />}
-        {moderate > 0 && <div style={{ width: pct(moderate), background: '#f59e0b' }} />}
-        {critical > 0 && <div className="animate-pulse" style={{ width: pct(critical), background: '#e85d22' }} />}
+      {/* segmented acuity bar (2px surface gaps between fills) */}
+      <div className="flex gap-[2px] h-2 rounded-full overflow-hidden bg-slate-100 mb-3">
+        {stable > 0 && <div className="rounded-full" style={{ width: pct(stable), background: CHART.blue }} />}
+        {moderate > 0 && <div className="rounded-full" style={{ width: pct(moderate), background: CHART.amber }} />}
+        {critical > 0 && <div className="rounded-full animate-pulse" style={{ width: pct(critical), background: CHART.orange }} />}
       </div>
 
       <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-wider">
         <span className="flex items-center gap-1.5 text-slate-500">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#3b82f6]" /> {stable} stable
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: CHART.blue }} /> {stable} stable
         </span>
         <span className="flex items-center gap-1.5 text-slate-500">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b]" /> {moderate} moderate
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: CHART.amber }} /> {moderate} moderate
         </span>
         <span className={`flex items-center gap-1.5 ${critical > 0 ? 'text-[#e85d22]' : 'text-slate-400'}`}>
-          <span className={`w-1.5 h-1.5 rounded-full bg-[#e85d22] ${critical > 0 ? 'animate-pulse' : 'opacity-40'}`} /> {critical} critical
+          <span className={`w-1.5 h-1.5 rounded-full ${critical > 0 ? 'animate-pulse' : 'opacity-40'}`} style={{ background: CHART.orange }} /> {critical} critical
         </span>
       </div>
     </Link>

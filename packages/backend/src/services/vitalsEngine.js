@@ -36,12 +36,29 @@ function estimateMap(vital) {
 // to the mock formula without the simulation tick ever crashing.
 async function getMlPrediction(patient) {
   try {
+    // Normalize the timeline for the model: one tick = one clinical hour.
+    // Stored timestamps mix wall-clock ticks (60s apart) and MIMIC's
+    // de-identified 2100s dates, so present the history as hourly readings
+    // ending now — the cadence the model was trained on.
+    const HOUR = 3600 * 1000;
+    const now = Date.now();
+    const n = patient.vitals.length;
+    const vitalsHistory = patient.vitals.map((v, i) => {
+      const plain = typeof v.toObject === 'function' ? v.toObject() : { ...v };
+      return { ...plain, timestamp: new Date(now - (n - 1 - i) * HOUR) };
+    });
+    // Hours in ICU: replay cursor for MIMIC stays (their real elapsed stay),
+    // otherwise at least the visible window.
+    const hoursInIcu = patient.dataSource === 'mimic' && patient.mimicCursor > 0
+      ? patient.mimicCursor + 1
+      : n + 1;
+
     const res = await fetch(`${ML_SERVICE_URL}/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        admissionDate: patient.admissionDate,
-        vitalsHistory: patient.vitals
+        admissionDate: new Date(now - hoursInIcu * HOUR),
+        vitalsHistory
       }),
       signal: AbortSignal.timeout(ML_TIMEOUT_MS)
     });
@@ -81,7 +98,17 @@ async function scoreAndAlert(patient, map, hr) {
         message: `Patient ${patient.name} has crossed critical risk threshold. MAP: ${Math.round(map)}, HR: ${Math.round(hr)}`,
         severity: patient.riskLevel === 'critical' ? 'critical' : 'high'
       });
-      console.log(`[VitalsEngine] 🚨 Alert triggered for ${patient.name}`);
+      console.log(`[VitalsEngine] Alert triggered for ${patient.name}`);
+    }
+  } else if (patient.riskLevel === 'low') {
+    // Patient recovered — auto-resolve their open alerts so the alert
+    // stream reflects reality and a future crossing raises a fresh alert.
+    const res = await Alert.updateMany(
+      { patient: patient._id, status: { $in: ['active', 'acknowledged'] } },
+      { status: 'resolved', resolvedAt: new Date() }
+    );
+    if (res.modifiedCount > 0) {
+      console.log(`[VitalsEngine] Auto-resolved ${res.modifiedCount} alert(s) for recovered ${patient.name}`);
     }
   }
 }
@@ -157,6 +184,10 @@ async function tickMimicPatient(patient) {
 
   const nextReading = patient.mimicHistory[patient.mimicCursor].toObject();
   delete nextReading._id; // avoid reusing the mimicHistory subdoc's _id on a distinct vitals entry
+  // Reveal onto the live timeline: the values are real MIMIC data, but the
+  // reading appears "now" (the original timestamps are de-identified 2100s
+  // dates, which froze every chart clock).
+  nextReading.timestamp = new Date();
   patient.mimicCursor += 1;
 
   patient.vitals.push(nextReading);
@@ -169,10 +200,18 @@ async function tickMimicPatient(patient) {
 }
 
 const startEngine = () => {
-  console.log('🧪 Live Vitals Simulation Engine Started');
+  console.log('Live Vitals Simulation Engine Started');
 
-  // Run every 60 seconds
+  // Run every 60 seconds. `ticking` guards against overlap: a slow tick
+  // (e.g. ml-service near its timeout for many patients) must not race a
+  // second copy of the same patient documents into VersionErrors.
+  let ticking = false;
   setInterval(async () => {
+    if (ticking) {
+      console.warn('[VitalsEngine] Previous tick still running — skipping this interval');
+      return;
+    }
+    ticking = true;
     try {
       const activePatients = await Patient.find({ isActive: true });
       if (activePatients.length === 0) return;
@@ -180,14 +219,21 @@ const startEngine = () => {
       console.log(`[VitalsEngine] Ticking vitals for ${activePatients.length} active patients...`);
 
       for (const patient of activePatients) {
-        if (patient.dataSource === 'mimic') {
-          await tickMimicPatient(patient);
-        } else {
-          await tickSimulatedPatient(patient);
+        try {
+          if (patient.dataSource === 'mimic') {
+            await tickMimicPatient(patient);
+          } else {
+            await tickSimulatedPatient(patient);
+          }
+        } catch (err) {
+          // One patient failing must not abort the rest of the tick
+          console.error(`[VitalsEngine] Tick failed for ${patient.name}: ${err.message}`);
         }
       }
     } catch (err) {
       console.error('[VitalsEngine] Error during simulation tick:', err);
+    } finally {
+      ticking = false;
     }
   }, 60000); // 60 seconds
 };

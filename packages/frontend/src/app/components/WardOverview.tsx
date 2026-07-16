@@ -1,4 +1,5 @@
 import { HeaderClock } from "./HeaderClock";
+import { CHART, StatTile } from "./ChartKit";
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
 import { Building2, Users, AlertTriangle, Search, ChevronRight, UserPlus } from "lucide-react";
@@ -143,33 +144,15 @@ export function WardOverview() {
 
         {/* Compact System Stats */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          <CompactStatCard 
-            title="Total Census" 
-            value={totalPatients} 
-            icon={Users} 
-            colorClass="text-slate-800" 
-            bgClass="bg-slate-100" 
-          />
-          <CompactStatCard 
-            title="Stable" 
-            value={totalStable} 
-            icon={Building2} 
-            colorClass="text-[#3b82f6]" 
-            bgClass="bg-[#3b82f6]/10" 
-          />
-          <CompactStatCard 
-            title="Moderate" 
-            value={totalModerate} 
-            icon={AlertTriangle} 
-            colorClass="text-[#f59e0b]" 
-            bgClass="bg-[#f59e0b]/10" 
-          />
-          <CompactStatCard 
-            title="Critical" 
-            value={totalCritical} 
-            icon={AlertTriangle} 
-            colorClass="text-[#e85d22]" 
-            bgClass="bg-[#e85d22]/10" 
+          <StatTile label="Total Census" value={totalPatients} icon={Users} accent="#64748b" />
+          <StatTile label="Stable" value={totalStable} icon={Building2} accent={CHART.blue} />
+          <StatTile label="Moderate" value={totalModerate} icon={AlertTriangle} accent={CHART.amber} />
+          <StatTile
+            label="Critical"
+            value={totalCritical}
+            icon={AlertTriangle}
+            accent={CHART.orange}
+            valueColor={totalCritical > 0 ? CHART.orange : undefined}
           />
         </div>
 
@@ -188,7 +171,7 @@ export function WardOverview() {
                   
                   {/* Left Side: Ward Title */}
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-white font-bold text-lg shadow-sm">
+                    <div className="h-10 min-w-[2.5rem] px-2.5 rounded-lg bg-slate-900 flex items-center justify-center text-white font-tele font-bold text-[11px] tracking-wide shadow-sm whitespace-nowrap">
                       {ward}
                     </div>
                     <div>
@@ -202,7 +185,7 @@ export function WardOverview() {
                     <div className="flex items-center gap-4 bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
                       <MiniStat label="STABLE" value={stats.stable} dotColor="bg-[#3b82f6]" />
                       <div className="w-px h-6 bg-slate-200"></div>
-                      <MiniStat label="MOD" value={stats.moderate} dotColor="bg-[#f59e0b]" />
+                      <MiniStat label="MOD" value={stats.moderate} dotColor="bg-[#e2a80d]" />
                       <div className="w-px h-6 bg-slate-200"></div>
                       <MiniStat label="CRIT" value={stats.critical} dotColor="bg-[#e85d22]" />
                     </div>
@@ -230,12 +213,12 @@ export function WardOverview() {
                           <div className="flex items-start justify-between mb-3">
                             <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                               patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]/10 text-[#3b82f6] border border-[#3b82f6]/20' :
-                              patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]/10 text-[#d97706] border border-[#f59e0b]/30' :
+                              patient.displayRiskLevel === 'MODERATE' ? 'bg-[#e2a80d]/10 text-[#d97706] border border-[#e2a80d]/30' :
                               'bg-[#e85d22]/10 text-[#e85d22] border border-[#e85d22]/20'
                             }`}>
                               <span className={`w-1.5 h-1.5 rounded-sm ${
                                 patient.displayRiskLevel === 'STABLE' ? 'bg-[#3b82f6]' :
-                                patient.displayRiskLevel === 'MODERATE' ? 'bg-[#f59e0b]' :
+                                patient.displayRiskLevel === 'MODERATE' ? 'bg-[#e2a80d]' :
                                 'bg-[#e85d22] animate-pulse'
                               }`}></span>
                               {patient.displayRiskLevel}
@@ -251,7 +234,7 @@ export function WardOverview() {
 
                         <div className="space-y-2">
                           {(patient.riskLevel === 'high' || patient.riskLevel === 'critical') && (
-                            <div className="bg-[#f59e0b]/10 border border-[#f59e0b]/30 text-[#d97706] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-center">
+                            <div className="bg-[#e2a80d]/10 border border-[#e2a80d]/30 text-[#d97706] px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider text-center">
                               Instability: {patient.riskLevel === 'critical' ? '1-2 hrs' : '4-6 hrs'}
                             </div>
                           )}
@@ -277,19 +260,6 @@ export function WardOverview() {
 }
 
 // Compact Stat Card
-function CompactStatCard({ title, value, icon: Icon, colorClass, bgClass }: any) {
-  return (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center gap-4">
-      <div className={`w-12 h-12 rounded-xl ${bgClass} flex items-center justify-center shrink-0`}>
-        <Icon className={`w-6 h-6 ${colorClass}`} />
-      </div>
-      <div>
-        <p className="text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-0.5">{title}</p>
-        <p className={`text-2xl font-bold ${colorClass} leading-none`}>{value}</p>
-      </div>
-    </div>
-  );
-}
 
 // Mini Stat for Ward Header
 function MiniStat({ label, value, dotColor }: { label: string, value: number, dotColor: string }) {

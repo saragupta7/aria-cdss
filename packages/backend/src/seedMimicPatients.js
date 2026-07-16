@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
 const Patient = require('./models/Patient');
+const Alert = require('./models/Alert');
 const { getMlPrediction, mockRiskScore, riskLevelFromScore, estimateMap } = require('./services/vitalsEngine');
 
 require('./dns-fix');
@@ -23,7 +24,15 @@ async function seed() {
   await mongoose.connect(process.env.MONGO_URI);
   console.log('Connected to DB');
 
+  // Remove the previous generation of replay patients AND their alerts —
+  // otherwise the alerts are orphaned (their patient no longer exists) and
+  // stay "active" forever, since the engine can never auto-resolve them.
+  const replaced = await Patient.find({ dataSource: 'mimic' }).select('_id');
   await Patient.deleteMany({ dataSource: 'mimic' });
+  if (replaced.length > 0) {
+    const { deletedCount } = await Alert.deleteMany({ patient: { $in: replaced.map((p) => p._id) } });
+    console.log(`Removed ${replaced.length} previous patients and ${deletedCount} of their alerts`);
+  }
 
   let scoredByModel = 0;
   for (const p of patients) {
