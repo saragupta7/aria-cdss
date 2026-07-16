@@ -7,6 +7,8 @@ instability (MAP < 65 mmHg or new vasopressor initiation, 4–6 hours ahead) is
 scored by **HemoAlert** — a calibrated XGBoost model trained on MIMIC-IV — with
 per-patient SHAP explanations of what is driving each score.
 
+Built by **Sara Gupta** & **Akshat Bajpai** — Complex Systems Lab, IIIT-Delhi.
+
 ## Architecture
 
 ```
