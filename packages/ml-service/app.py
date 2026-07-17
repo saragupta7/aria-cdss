@@ -96,12 +96,28 @@ class PredictRequest(BaseModel):
 
 
 def _risk_level(score: float) -> str:
-    # Mirrors Patient.updateRiskLevel() in packages/backend/src/models/Patient.js
-    if score >= 0.8:
+    # Band relative to the model's operating threshold (metadata.json,
+    # chosen by the training pipeline). Scores are calibrated probabilities
+    # of a rare event, so they cluster well below the 0.4/0.6/0.8 bands the
+    # backend heuristic uses — on that absolute scale the trained model
+    # could never raise a high/critical alert.
+    threshold = (_state["metadata"] or {}).get("threshold")
+    if not threshold:
+        # No operating threshold recorded — fall back to the heuristic-scale
+        # bands (Patient.updateRiskLevel() in packages/backend/src/models/Patient.js).
+        if score >= 0.8:
+            return "critical"
+        if score >= 0.6:
+            return "high"
+        if score >= 0.4:
+            return "medium"
+        return "low"
+
+    if score >= min(3 * threshold, 0.8):
         return "critical"
-    if score >= 0.6:
+    if score >= threshold:
         return "high"
-    if score >= 0.4:
+    if score >= threshold / 2:
         return "medium"
     return "low"
 

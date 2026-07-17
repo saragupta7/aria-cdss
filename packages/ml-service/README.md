@@ -101,5 +101,10 @@ Response:
 }
 ```
 
-`riskLevel` thresholds match `Patient.updateRiskLevel()` in the backend, so
-a score from here maps to the same risk band the rest of the app expects.
+`riskLevel` is banded relative to the model's operating threshold from
+`metadata.json` (`high` ≥ threshold, `critical` ≥ 3× threshold capped at 0.8,
+`medium` ≥ half the threshold). Calibrated probabilities of a rare event sit
+far below the backend heuristic's 0.4/0.6/0.8 scale, so absolute bands would
+make high/critical unreachable and silence alerts. If `metadata.json` has no
+`threshold`, the heuristic-scale bands (`Patient.updateRiskLevel()` in the
+backend) are used as a fallback.
