@@ -81,10 +81,16 @@ async function scoreAndAlert(patient, map, hr) {
     patient.riskScore = prediction.riskScore;
     patient.riskLevel = prediction.riskLevel;
     patient.riskShap = prediction.shapValues;
+    patient.riskSource = 'model';
   } else {
     const riskScore = mockRiskScore(map, hr, latest?.oxygenSaturation ?? 98);
     patient.riskScore = riskScore;
     patient.riskLevel = riskLevelFromScore(riskScore);
+    // Drop any SHAP left over from a previous model-scored tick — it explains
+    // a score this tick just replaced, and keeping it would make the frontend
+    // label a heuristic score 'HemoAlert model'.
+    patient.riskShap = [];
+    patient.riskSource = 'heuristic';
   }
 
   await patient.save();

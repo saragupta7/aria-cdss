@@ -89,9 +89,19 @@ const patientSchema = new mongoose.Schema(
       enum: ['low', 'medium', 'high', 'critical'],
       default: 'low'
     },
-    // Populated from the ml-service prediction response; falls back to a
-    // client-side heuristic in the frontend when the model hasn't run yet.
+    // Populated from the ml-service prediction response; cleared on ticks
+    // that fall back to the mock formula so it never outlives the score it
+    // explains.
     riskShap: [shapFeatureSchema],
+
+    // Which scorer produced the current riskScore/riskLevel. Read by the
+    // frontend to label a score 'HemoAlert model' vs 'Heuristic estimate' —
+    // the single source of truth for that badge, so it can't go stale.
+    riskSource: {
+      type: String,
+      enum: ['model', 'heuristic'],
+      default: 'heuristic'
+    },
 
     isActive: {
       type: Boolean,

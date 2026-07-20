@@ -52,6 +52,10 @@ export interface Patient {
   riskScore: number;
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   riskShap?: SHAPFeature[];
+  // Which scorer produced the current riskScore/riskLevel — the same
+  // 'model' | 'heuristic' distinction the Training Sandbox reports live,
+  // so every view labels a score the same way.
+  riskSource?: 'model' | 'heuristic';
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;

@@ -160,10 +160,16 @@ export function PatientDetail() {
     { feature: 'Resp Rate', impact: latestVitals.rr > 22 ? 20 : latestVitals.rr > 18 ? 10 : 4, value: `${latestVitals.rr} /min` },
   ].sort((a, b) => b.impact - a.impact);
 
-  const shapData = patient.riskShap && patient.riskShap.length > 0
+  // The engine records which scorer produced the current score
+  // (patient.riskSource) — the same 'model' | 'heuristic' signal the Training
+  // Sandbox shows live, so both views label a score identically. Fall back to
+  // SHAP presence for patients last scored before riskSource existed.
+  const isRealShap = patient.riskSource
+    ? patient.riskSource === 'model'
+    : Boolean(patient.riskShap && patient.riskShap.length > 0);
+  const shapData = isRealShap && patient.riskShap && patient.riskShap.length > 0
     ? patient.riskShap
     : heuristicShapData;
-  const isRealShap = Boolean(patient.riskShap && patient.riskShap.length > 0);
 
   const readingsCount = vitalsData.length;
   const lastUpdated = patient.vitals?.length

@@ -55,11 +55,13 @@ async function seed() {
       p.riskScore = prediction.riskScore;
       p.riskLevel = prediction.riskLevel;
       p.riskShap = prediction.shapValues;
+      p.riskSource = 'model';
       scoredByModel++;
     } else {
       const score = mockRiskScore(estimateMap(lastVital), lastVital.heartRate || 80, lastVital.oxygenSaturation || 98);
       p.riskScore = score;
       p.riskLevel = riskLevelFromScore(score);
+      p.riskSource = 'heuristic';
     }
   }
 
