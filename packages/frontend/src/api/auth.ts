@@ -10,7 +10,9 @@ export const authApi = {
 
   logout: () => {
     localStorage.removeItem('aria_token')
-    window.location.href = '/login'
+    // BASE_URL carries the app's deploy path (e.g. '/aria/'), so the redirect
+    // lands on the real login route instead of a base-less '/login' that 502s.
+    window.location.href = `${import.meta.env.BASE_URL}login`
   },
 
   me: async () => {
