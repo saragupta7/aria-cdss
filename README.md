@@ -62,6 +62,8 @@ pnpm install
 #   packages/backend/.env: MONGO_URI, JWT_SECRET, PORT=5001,
 #                          ML_SERVICE_URL=http://localhost:8000 (default),
 #                          JWT_EXPIRES_IN=24h (default),
+#                          SEED_ADMIN_PASSWORD, SEED_DOCTOR_PASSWORD
+#                          (first-run seed accounts; omit to skip seeding),
 #                          CORS_ORIGINS=<comma-separated deployed frontend
 #                          origins; localhost is always allowed>
 
@@ -83,8 +85,10 @@ pnpm dev:ml     # ml-service (separate terminal; uses packages/ml-service/.venv 
 
 Or individually: `pnpm dev:be`, `pnpm dev:fe`.
 
-First run auto-creates two accounts: `admin@aria.com` / `CHANGEME` (admin)
-and `test@aria.com` / `CHANGEME` (junior).
+First run auto-creates two accounts — `admin@aria.com` (admin) and
+`test@aria.com` (junior) — using the passwords you set in
+`SEED_ADMIN_PASSWORD` and `SEED_DOCTOR_PASSWORD`. Accounts whose password
+env var is unset are skipped.
 
 ### Seeding the 50 MIMIC-IV patients
 
@@ -119,8 +123,9 @@ VITE_API_URL=https://<backend-host>/api pnpm --filter frontend build
 ```
 
 **backend** — Node process. Set the env vars from [Setup](#setup)
-(`MONGO_URI`, `JWT_SECRET`, `CORS_ORIGINS`, `ML_SERVICE_URL` pointing at the
-deployed ml-service), then:
+(`MONGO_URI`, `JWT_SECRET`, `CORS_ORIGINS`, `SEED_ADMIN_PASSWORD`,
+`SEED_DOCTOR_PASSWORD`, `ML_SERVICE_URL` pointing at the deployed
+ml-service), then:
 
 ```bash
 pnpm --filter backend start      # node src/server.js

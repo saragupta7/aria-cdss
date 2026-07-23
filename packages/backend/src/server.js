@@ -84,16 +84,21 @@ app.listen(PORT, () => {
 const seedUser = async () => {
   const User = require('./models/User');
   // Ensure known accounts exist so every role is reachable out of the box.
-  // Non-destructive: only creates accounts that are missing.
+  // Non-destructive: only creates accounts that are missing. Passwords come
+  // from the environment so no credential lives in the repo.
   const defaults = [
-    { name: 'Admin User', email: 'admin@aria.com', password: 'CHANGEME', role: 'admin' },
-    { name: 'Test Doctor', email: 'test@aria.com', password: 'CHANGEME', role: 'junior' }
+    { name: 'Admin User', email: 'admin@aria.com', password: process.env.SEED_ADMIN_PASSWORD, role: 'admin' },
+    { name: 'Test Doctor', email: 'test@aria.com', password: process.env.SEED_DOCTOR_PASSWORD, role: 'junior' }
   ];
   for (const acct of defaults) {
+    if (!acct.password) {
+      console.log(`Seed user skipped: ${acct.email} (no password set in env)`);
+      continue;
+    }
     const exists = await User.findOne({ email: acct.email });
     if (!exists) {
       await User.create(acct);
-      console.log(`Seed user created: ${acct.email} / ${acct.password} (${acct.role})`);
+      console.log(`Seed user created: ${acct.email} (${acct.role})`);
     }
   }
 };
